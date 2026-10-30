@@ -32,7 +32,7 @@ On the epic: `gh issue view <epic> --comments`, the repo's CLAUDE.md, and the do
 
 {{repo_rules}}
 
-## 5. Judgment calls
+## 5. Procedure: judgment calls
 
 For each event, answer with one decision block (see section 7):
 
