@@ -18,7 +18,7 @@ func TestStopEventStored(t *testing.T) {
 	}
 	defer st.Close()
 
-	srv := httptest.NewServer(Handler(st))
+	srv := httptest.NewServer(Handler(st, nil))
 	defer srv.Close()
 
 	body := `{"hook_event_name":"Stop","session_id":"s1"}`

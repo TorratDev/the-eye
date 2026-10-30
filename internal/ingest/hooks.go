@@ -23,7 +23,8 @@ const maxBody = 1 << 20
 
 // Handler returns the POST /hooks endpoint. The hook command forwards the role and pane the
 // session was launched with, from HUB_ROLE and HUB_PANE, in the X-Hub-Role and X-Hub-Pane headers.
-func Handler(st *hub.Store) http.Handler {
+// onEvent, if set, is called with each stored event, so live clients see it.
+func Handler(st *hub.Store, onEvent func(hub.Event)) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "POST only", http.StatusMethodNotAllowed)
@@ -43,6 +44,9 @@ func Handler(st *hub.Store) http.Handler {
 		if err := st.RecordEvent(e); err != nil {
 			http.Error(w, "store failed", http.StatusInternalServerError)
 			return
+		}
+		if onEvent != nil {
+			onEvent(e)
 		}
 		w.WriteHeader(http.StatusNoContent)
 	})
