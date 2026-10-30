@@ -146,7 +146,7 @@ func (c *Client) blockersAfter(owner, name string, number int, cursor string) ([
 	for {
 		var resp struct {
 			Repository struct {
-				Issue struct {
+				Issue *struct {
 					BlockedBy blockerPage `json:"blockedBy"`
 				} `json:"issue"`
 			} `json:"repository"`
@@ -154,6 +154,9 @@ func (c *Client) blockersAfter(owner, name string, number int, cursor string) ([
 		vars := map[string]any{"owner": owner, "name": name, "number": number, "cursor": cursor}
 		if err := c.do(blockersQuery, vars, &resp); err != nil {
 			return nil, err
+		}
+		if resp.Repository.Issue == nil {
+			return nil, fmt.Errorf("issue #%d not found in %s/%s", number, owner, name)
 		}
 		page := resp.Repository.Issue.BlockedBy
 		out = append(out, page.Nodes...)
