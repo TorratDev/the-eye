@@ -33,6 +33,10 @@ CREATE TABLE IF NOT EXISTS events (
 	session     TEXT,
 	payload     TEXT
 );
+CREATE TABLE IF NOT EXISTS cloud_seen (
+	number  INTEGER PRIMARY KEY,
+	seen_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS reports (
 	id         INTEGER PRIMARY KEY AUTOINCREMENT,
 	created_at TEXT NOT NULL,
@@ -288,5 +292,23 @@ func (s *Store) TaskNumbersByState() (map[string][]int, error) {
 func (s *Store) SetState(number int, state string) error {
 	_, err := s.db.Exec(`INSERT INTO tasks (number, state) VALUES (?, ?)
 		ON CONFLICT(number) DO UPDATE SET state = excluded.state`, number, state)
+	return err
+}
+
+// CloudSeen returns the creation time of the newest cloud comment already applied to a sub-issue,
+// or "" if none has been applied.
+func (s *Store) CloudSeen(number int) (string, error) {
+	var at string
+	err := s.db.QueryRow(`SELECT seen_at FROM cloud_seen WHERE number = ?`, number).Scan(&at)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	return at, err
+}
+
+// SetCloudSeen records the newest applied cloud comment time for a sub-issue.
+func (s *Store) SetCloudSeen(number int, at string) error {
+	_, err := s.db.Exec(`INSERT INTO cloud_seen (number, seen_at) VALUES (?, ?)
+		ON CONFLICT(number) DO UPDATE SET seen_at = excluded.seen_at`, number, at)
 	return err
 }
