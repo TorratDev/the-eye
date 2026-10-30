@@ -43,3 +43,18 @@ What this shows:
 - The first run (`echo`) showed the same pattern, except the command was not rewritten. RTK rewrites only some commands.
 
 Not checked: the Ponytail hooks and the herdr `SessionStart` hook were not logged, and the order of the hub's `Notification` hook is untested because no hub hook exists yet.
+
+## Ponytail context overhead (one sample each)
+
+Same sub-issue (#18: check the four role prompts against the eight-part shape and add a test), run once with Ponytail enabled and once with it disabled through `--settings`, on claude-haiku-5-5, with `claude -p --output-format json` in a fresh worktree from `origin/main`.
+
+| Run | Input tokens | Cache write | Cache read | Output tokens | Turns | Cost (USD) | Time (s) | Test file lines |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Ponytail on (default) | 14 | 29,619 | 245,858 | 4,090 | 7 | 0.0104 | 33.3 | 89 |
+| Ponytail off (`enabledPlugins` false) | 18 | 27,899 | 322,743 | 5,590 | 9 | 0.0116 | 38.2 | 102 |
+
+What the numbers show, and what they don't:
+- With Ponytail on, the run was cheaper and used fewer turns, and the test file was smaller.
+- The off run's test caught a real drift: `prompts/orchestrator.md` names section 5 "Judgment calls", not "Procedure". The on run accepted that title by widening its check, so the drift went unreported. Ponytail's "smallest change" rule may have encouraged that, but one sample cannot show it.
+- One sample per condition is not enough to set a default. The default level per role is not decided yet. Ponytail stays on everywhere until more runs say otherwise.
+- The off setting was applied through `--settings`. The run did not check that the plugin was absent from the session context.
