@@ -1,30 +1,41 @@
 # Per-repo config
 
-The hub fills the `{{...}}` placeholders in the role prompts from one file per repo. The prompts stay the same for every repo.
+The hub fills the `{{...}}` placeholders in the role prompts from one file per repo, `repos/<repo>.md`, in the hub's repo. The format is set by `prompts/README.md`. This doc says how `internal/config` reads it.
 
-## Decision
+## Format
 
-- **Format**: JSON, read with `encoding/json`. The hub is stdlib-only, and Go has no TOML or YAML parser in the standard library.
-- **Location**: `.orchestrator/repo.json` at the repo root, tracked in git. It is config, not state, so it is not under `.hub/`, which is gitignored.
+```markdown
+# rust-mm
 
-## Fields
+repo_name: rust-mm
+repo_summary: DS game reimplementation in Rust
+verify: cargo test
+worktree_root: ../wt
 
-| Field | Fills | Example |
-| --- | --- | --- |
-| `repo_name` | `{{repo_name}}` | `rust-mm` |
-| `repo_summary` | `{{repo_summary}}` | `Rust reimplementation of a DS game` |
-| `module_dir` | rules: where the code lives | `src/` |
-| `docs` | `{{repo_rules}}`: docs each role reads | `["docs/legal.md"]` |
-| `verify_command` | `{{repo_rules}}`: check to run before PASS or DONE | `cargo test` |
-| `rules` | `{{repo_rules}}`: free-text hard rules | `["No ROM dumps in the repo."]` |
+## all
+Rules every role follows.
 
-`repo_rules` is built from `docs`, `verify_command` and `rules`. The renderer (#21) is the only place that does this, so each prompt gets the same text.
+## executor
+Rules for executors only.
 
-## Rules
+## resources
+| name | lock |
+| --- | --- |
+```
 
-- Missing required fields are an error when the file is parsed (#20). Unknown fields are an error too, so a typo fails loudly.
-- The file is read from the target repo, not from the hub's own repo.
+- **Header**: `key: value` lines before the first `##` heading. Allowed keys: `repo_name`, `repo_summary` (both required), `verify`, `worktree_root`, `shared_files`. Any other key is an error.
+- **Sections**: `## all`, `## orchestrator`, `## investigator`, `## executor`, `## reviewer`, `## resources`. Any other name is an error, and so is a second section with the same name.
+- `## resources` is for the hub (locks, dispatch). It is never injected into a prompt.
 
-## Open
+## Placeholders
 
-- The plan's question was `.orchestrator/repo.md` or similar. This picks JSON, so a repo's rules must be written as JSON strings, not Markdown. If the rules grow long, a Markdown file for prose can be added later under the same directory.
+| Placeholder | Source |
+| --- | --- |
+| `{{repo_name}}`, `{{repo_summary}}` | header `repo_name`, `repo_summary` |
+| `{{repo_rules}}` | `## all`, then the role's own section, joined by a blank line |
+
+`Config.RepoRules(role)` builds `{{repo_rules}}`. The renderer (#21) is the only place that fills placeholders.
+
+## Why this format
+
+It is the format `prompts/README.md` already describes, so the prompts and the config agree. An earlier draft chose JSON in the target repo. That was wrong: it contradicted `prompts/README.md`, which is the spec.
