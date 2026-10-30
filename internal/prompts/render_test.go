@@ -55,3 +55,24 @@ func TestRenderFailsOnUnfilled(t *testing.T) {
 		t.Errorf("Render = %q, %v", out, err)
 	}
 }
+
+// The real rust-mm config fills every role prompt with no placeholder left.
+func TestRustMMConfigRenders(t *testing.T) {
+	c, err := config.Load(filepath.Join("..", "..", "repos", "rust-mm.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, role := range []string{"orchestrator", "investigator", "executor", "reviewer"} {
+		raw, err := os.ReadFile(filepath.Join("..", "..", "prompts", role+".md"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		out, err := RenderRole(role, string(raw), c)
+		if err != nil {
+			t.Fatalf("%s: %v", role, err)
+		}
+		if strings.Contains(out, "{{") || !strings.Contains(out, "rust-mm") {
+			t.Errorf("%s: not rendered from rust-mm config", role)
+		}
+	}
+}
