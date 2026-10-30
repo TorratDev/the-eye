@@ -69,3 +69,14 @@ func tryRead(lines chan string, d time.Duration) (string, bool) {
 		return "", false
 	}
 }
+
+// A multi-line payload stays one event: every line carries its own data: prefix.
+func TestMultilinePayload(t *testing.T) {
+	b := NewBroker()
+	ch := b.subscribe()
+	b.Publish("state", "<tr>\n<td>x</td>")
+	frame := <-ch
+	if want := "event: state\ndata: <tr>\ndata: <td>x</td>\n\n"; frame != want {
+		t.Errorf("frame = %q, want %q", frame, want)
+	}
+}

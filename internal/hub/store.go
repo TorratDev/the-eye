@@ -208,3 +208,36 @@ func (s *Store) Reports(issue int) (int, error) {
 	err := s.db.QueryRow(`SELECT COUNT(*) FROM reports WHERE issue = ?`, issue).Scan(&n)
 	return n, err
 }
+
+// LatestPerPane returns the most recent stored event of each pane.
+func (s *Store) LatestPerPane() ([]Event, error) {
+	rows, err := s.db.Query(`SELECT received_at, hook, role, pane, COALESCE(session, ''), COALESCE(payload, '')
+		FROM events WHERE id IN (SELECT MAX(id) FROM events GROUP BY pane) ORDER BY pane`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Event
+	for rows.Next() {
+		var e Event
+		var at string
+		if err := rows.Scan(&at, &e.Hook, &e.Role, &e.Pane, &e.Session, &e.Payload); err != nil {
+			return nil, err
+		}
+		if e.ReceivedAt, err = time.Parse(time.RFC3339Nano, at); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
+// SubIssueForPane returns the sub-issue whose task runs in pane, or 0 if none does.
+func (s *Store) SubIssueForPane(pane string) (int, error) {
+	var n int
+	err := s.db.QueryRow(`SELECT number FROM tasks WHERE pane = ? ORDER BY number LIMIT 1`, pane).Scan(&n)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	return n, err
+}
