@@ -133,5 +133,5 @@ Each phase ends with something runnable; cloud workers come last.
 Open questions:
 
 - [ ] Per-repo config format and location (for example `.orchestrator/repo.md`)?
-- [ ] Should the hub or the executor open the PR after PASS?
+- [x] Should the hub or the executor open the PR after PASS? Decided: the hub (see `docs/pr-owner.md`).
 - [ ] Is Sonnet strict enough as reviewer, or do some epics need Opus?
