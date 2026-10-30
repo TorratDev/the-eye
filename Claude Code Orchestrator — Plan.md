@@ -102,7 +102,7 @@ Hooks are the primary state signal; herdr is used to spawn sessions and as a sec
 | `report` MCP tool | Status and summary of the task | Hub stores it and comments it on the issue |
 | Final line in the pane | DONE/BLOCKED or reviewer verdict | Parsed by the Stop hook as fallback |
 | herdr agent state | Working, idle, blocked | `herdr agent read` / socket API |
-| GitHub | Cloud workers' comments and PRs | Webhook or polling |
+| GitHub | Cloud workers' comments and PRs | Polling (decided in `docs/cloud-reports.md`) |
 | Channel relay | Hub events into the orchestrator session | Go stdio MCP (`mark3labs/mcp-go`) subscribing to `/events` over SSE |
 
 The web UI subscribes to the same SSE stream (Go plus htmx) and shows sessions, states, errors and issue progress.
