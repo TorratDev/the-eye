@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 // ClaimLabel is the visible claim marker on a sub-issue.
@@ -216,10 +217,26 @@ func SetClaimLabel(repo string, number int, on bool) error {
 	if !on {
 		return run("gh", "issue", "edit", num, "--repo", repo, "--remove-label", ClaimLabel)
 	}
-	if err := run("gh", "label", "create", ClaimLabel, "--repo", repo, "--force", "--color", "fbca04", "--description", "Claimed by a hub run"); err != nil {
+	if err := EnsureClaimLabel(repo); err != nil {
 		return err
 	}
 	return run("gh", "issue", "edit", num, "--repo", repo, "--add-label", ClaimLabel)
+}
+
+var claimLabelReady sync.Map // repo -> struct{}: label known to exist in this process
+
+// EnsureClaimLabel creates the claim label once per repo and process. An existing label
+// counts as success and is left as is.
+func EnsureClaimLabel(repo string) error {
+	if _, ok := claimLabelReady.Load(repo); ok {
+		return nil
+	}
+	err := run("gh", "label", "create", ClaimLabel, "--repo", repo, "--color", "fbca04", "--description", "Claimed by a hub run")
+	if err != nil && !strings.Contains(err.Error(), "already exists") {
+		return err
+	}
+	claimLabelReady.Store(repo, struct{}{})
+	return nil
 }
 
 // GhToken returns the token of the active gh login.
