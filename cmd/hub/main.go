@@ -4,12 +4,15 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
 
 	"github.com/TorratDev/the-eye/internal/hub"
+	"github.com/TorratDev/the-eye/internal/live"
+	"github.com/TorratDev/the-eye/internal/ui"
 )
 
 const (
@@ -26,6 +29,9 @@ func main() {
 }
 
 func run(args []string) error {
+	if len(args) > 0 && args[0] == "serve" {
+		return serve(args[1:])
+	}
 	if len(args) == 0 || args[0] != "sync" {
 		return errors.New(usage)
 	}
@@ -51,6 +57,22 @@ func run(args []string) error {
 		return err
 	}
 	return sync(owner, name, epic)
+}
+
+// serve runs the watcher page, the hook endpoint and the live stream on addr.
+func serve(args []string) error {
+	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
+	addr := fs.String("addr", "127.0.0.1:8080", "listen address; keep it on localhost")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	st, err := hub.OpenStore(stateFile)
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+	fmt.Printf("hub: serving on http://%s (state in %s)\n", *addr, stateFile)
+	return http.ListenAndServe(*addr, ui.Handler(st, live.NewBroker()))
 }
 
 // sync prints every sub-issue with its state, blockers and ready flag. It dispatches nothing.

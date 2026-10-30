@@ -4,6 +4,7 @@ package live
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 )
 
@@ -18,10 +19,15 @@ func NewBroker() *Broker {
 	return &Broker{subs: map[chan string]struct{}{}}
 }
 
+// Frame formats one SSE event. Each line of a multi-line payload needs its own "data:" prefix.
+func Frame(name, data string) string {
+	return "event: " + name + "\n" + "data: " + strings.ReplaceAll(data, "\n", "\ndata: ") + "\n\n"
+}
+
 // Publish sends one event to every client. A client that is not keeping up misses the event
 // rather than holding up the hub.
 func (b *Broker) Publish(name, data string) {
-	frame := fmt.Sprintf("event: %s\ndata: %s\n\n", name, data)
+	frame := Frame(name, data)
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	for ch := range b.subs {
