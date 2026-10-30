@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	_ "modernc.org/sqlite"
+	_ "modernc.org/sqlite" // store choice: modernc.org/sqlite, pure Go, no cgo
 )
 
 // Store is the local task state. It replaces progress.md and survives restarts.
@@ -17,6 +17,7 @@ const schema = `CREATE TABLE IF NOT EXISTS tasks (
 	number       INTEGER PRIMARY KEY,
 	epic         INTEGER,
 	claimed_by   TEXT,
+	state        TEXT,
 	batch        INTEGER,
 	revise_count INTEGER NOT NULL DEFAULT 0,
 	worktree     TEXT,
@@ -28,12 +29,15 @@ func OpenStore(path string) (*Store, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return nil, err
 	}
-	db, err := sql.Open("sqlite", path+"?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)")
+	db, err := sql.Open("sqlite", path+"?_pragma=busy_timeout(5000)&_pragma=locking_mode(EXCLUSIVE)&_pragma=journal_mode(WAL)")
 	if err != nil {
 		return nil, err
 	}
-	db.SetMaxOpenConns(1) // one writer per process; SQLite serializes across processes
-	if _, err := db.Exec(schema); err != nil {
+	// One connection holds the exclusive file lock for the life of the Store,
+	// so a second process (or a second OpenStore) gets SQLITE_BUSY.
+	db.SetMaxOpenConns(1)
+	// BEGIN EXCLUSIVE takes the write lock now; CREATE IF NOT EXISTS alone only reads an existing file.
+	if _, err := db.Exec("BEGIN EXCLUSIVE; " + schema + "; COMMIT"); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -102,4 +106,31 @@ func (s *Store) IncrementRevise(number int) (int, error) {
 		return 0, err
 	}
 	return count, tx.Commit()
+}
+
+// Task is the per-sub-issue state the hub tracks besides the claim.
+type Task struct {
+	State    string
+	Batch    int
+	Worktree string
+	Pane     string
+}
+
+// SetTask writes state, batch, worktree and pane for a sub-issue.
+func (s *Store) SetTask(number int, t Task) error {
+	_, err := s.db.Exec(`INSERT INTO tasks (number, state, batch, worktree, pane) VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(number) DO UPDATE SET state = excluded.state, batch = excluded.batch,
+		worktree = excluded.worktree, pane = excluded.pane`, number, t.State, t.Batch, t.Worktree, t.Pane)
+	return err
+}
+
+// Task returns state, batch, worktree and pane for a sub-issue; unset fields are zero.
+func (s *Store) Task(number int) (Task, error) {
+	var t Task
+	err := s.db.QueryRow(`SELECT COALESCE(state, ''), COALESCE(batch, 0), COALESCE(worktree, ''), COALESCE(pane, '')
+		FROM tasks WHERE number = ?`, number).Scan(&t.State, &t.Batch, &t.Worktree, &t.Pane)
+	if err == sql.ErrNoRows {
+		return Task{}, nil
+	}
+	return t, err
 }

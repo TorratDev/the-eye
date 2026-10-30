@@ -3,6 +3,7 @@ package hub
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -87,7 +88,9 @@ func TestReviseCounterSurvivesRestart(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	st.Close()
+	if err := st.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	st = openTest(t, path)
 	got, err := st.IncrementRevise(3)
@@ -96,5 +99,60 @@ func TestReviseCounterSurvivesRestart(t *testing.T) {
 	}
 	if got != 3 {
 		t.Fatalf("revise count after restart = %d, want 3", got)
+	}
+}
+
+func TestTaskAndReviseSurviveRestart(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.db")
+	st, err := OpenStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := Task{State: "review", Batch: 2, Worktree: "C:/wt/5-state-store", Pane: "%3"}
+	if err := st.SetTask(5, want); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.IncrementRevise(5); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	st = openTest(t, path)
+	got, err := st.Task(5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Fatalf("task after restart = %+v, want %+v", got, want)
+	}
+	var revise int
+	if err := st.db.QueryRow(`SELECT revise_count FROM tasks WHERE number = 5`).Scan(&revise); err != nil {
+		t.Fatal(err)
+	}
+	if revise != 1 {
+		t.Fatalf("revise count after restart = %d, want 1", revise)
+	}
+}
+
+func TestSecondOpenIsRefused(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.db")
+	st, err := OpenStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Close(); err != nil {
+		t.Fatal(err)
+	}
+	openTest(t, path) // reopen: the lock must be taken even when the schema already exists
+	st2, err := OpenStore(path)
+	if err == nil {
+		st2.Close()
+		t.Fatal("second OpenStore succeeded while the first is open")
+	}
+	t.Log(err)
+	if !strings.Contains(err.Error(), "locked") && !strings.Contains(err.Error(), "busy") {
+		t.Fatalf("second OpenStore error = %v, want database is locked", err)
 	}
 }
