@@ -156,3 +156,23 @@ func TestSecondOpenIsRefused(t *testing.T) {
 		t.Fatalf("second OpenStore error = %v, want database is locked", err)
 	}
 }
+
+func TestClaimSetsEpicOnReviseFirstRow(t *testing.T) {
+	st := openTest(t, filepath.Join(t.TempDir(), "state.db"))
+	if _, err := st.IncrementRevise(6); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := st.Claim(6, 8, "run-a"); !ok || err != nil {
+		t.Fatalf("claim = %v, %v", ok, err)
+	}
+	if _, err := st.Claim(6, 9, "run-b"); err != nil { // loser must not overwrite the epic
+		t.Fatal(err)
+	}
+	var epic int
+	if err := st.db.QueryRow(`SELECT epic FROM tasks WHERE number = 6`).Scan(&epic); err != nil {
+		t.Fatal(err)
+	}
+	if epic != 8 {
+		t.Fatalf("epic = %d, want 8", epic)
+	}
+}

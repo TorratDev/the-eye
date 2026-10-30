@@ -52,7 +52,9 @@ func (s *Store) Close() error {
 // Claim sets owner on a sub-issue if nobody holds it. A single UPDATE is atomic in SQLite,
 // so of several concurrent claims exactly one returns true.
 func (s *Store) Claim(number, epic int, owner string) (bool, error) {
-	if _, err := s.db.Exec(`INSERT OR IGNORE INTO tasks (number, epic) VALUES (?, ?)`, number, epic); err != nil {
+	// A row made first by IncrementRevise or SetTask has no epic yet; fill it in, never overwrite.
+	if _, err := s.db.Exec(`INSERT INTO tasks (number, epic) VALUES (?, ?)
+		ON CONFLICT(number) DO UPDATE SET epic = excluded.epic WHERE epic IS NULL`, number, epic); err != nil {
 		return false, err
 	}
 	res, err := s.db.Exec(`UPDATE tasks SET claimed_by = ? WHERE number = ? AND claimed_by IS NULL`, owner, number)
