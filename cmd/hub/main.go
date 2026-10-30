@@ -16,7 +16,9 @@ import (
 	"github.com/TorratDev/the-eye/internal/cloud"
 	"github.com/TorratDev/the-eye/internal/hub"
 	"github.com/TorratDev/the-eye/internal/live"
+	"github.com/TorratDev/the-eye/internal/report"
 	"github.com/TorratDev/the-eye/internal/ui"
+	"github.com/mark3labs/mcp-go/server"
 )
 
 const (
@@ -35,6 +37,9 @@ func main() {
 func run(args []string) error {
 	if len(args) > 0 && args[0] == "serve" {
 		return serve(args[1:])
+	}
+	if len(args) > 0 && args[0] == "mcp" {
+		return mcpServe(args[1:])
 	}
 	if len(args) == 0 || args[0] != "sync" {
 		return errors.New(usage)
@@ -63,6 +68,21 @@ func run(args []string) error {
 	return sync(owner, name, epic)
 }
 
+// mcpServe runs the report tool over stdio for one session. It does not open the store: `hub serve`
+// holds it, so the session sends its report to the server's POST /report instead.
+func mcpServe(args []string) error {
+	fs := flag.NewFlagSet("mcp", flag.ContinueOnError)
+	url := fs.String("url", "http://127.0.0.1:8080", "the hub serve address")
+	role := fs.String("role", os.Getenv("HUB_ROLE"), "this session's role (default: HUB_ROLE)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *role == "" {
+		return errors.New("mcp needs --role or HUB_ROLE")
+	}
+	return server.ServeStdio(report.RemoteServer(*url, *role))
+}
+
 // serve runs the watcher page, the hook endpoint and the live stream on addr.
 func serve(args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
@@ -78,13 +98,19 @@ func serve(args []string) error {
 		return err
 	}
 	defer st.Close()
+	// without a repo the report endpoint refuses, and polling cannot start
+	repo := *repoFlag
+	if repo == "" {
+		repo, _ = originRepo()
+	}
+	var commenter report.Commenter
+	if repo != "" {
+		commenter = report.GhCommenter{Repo: repo}
+	}
 	broker := live.NewBroker()
 	if *epic > 0 {
-		repo := *repoFlag
 		if repo == "" {
-			if repo, err = originRepo(); err != nil {
-				return err
-			}
+			return errors.New("polling needs --repo or an origin remote")
 		}
 		owner, name, err := parseRepo(repo)
 		if err != nil {
@@ -93,7 +119,7 @@ func serve(args []string) error {
 		go pollCloud(st, broker, owner+"/"+name, owner, name, *epic, *poll)
 	}
 	fmt.Printf("hub: serving on http://%s (state in %s)\n", *addr, stateFile)
-	return http.ListenAndServe(*addr, ui.Handler(st, broker))
+	return http.ListenAndServe(*addr, ui.Handler(st, broker, commenter))
 }
 
 // pollCloud reads the epic's open sub-issues every interval and applies new cloud reports.

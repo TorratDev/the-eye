@@ -28,9 +28,13 @@ func Command(kind, pane, prompt string) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("unknown role %q", kind)
 	}
-	return fmt.Sprintf("HUB_ROLE=%s HUB_PANE=%s claude --model %s --append-system-prompt %s --allowedTools %s",
-		kind, pane, l.Model, shQuote(prompt), strings.Join(l.Tools, ",")), nil
+	return fmt.Sprintf("HUB_ROLE=%s HUB_PANE=%s claude --model %s --append-system-prompt %s --allowedTools %s --mcp-config %s",
+		kind, pane, l.Model, shQuote(prompt), strings.Join(l.Tools, ","), shQuote(mcpConfig)), nil
 }
+
+// mcpConfig starts the hub's report tool for every session. The server reads the role from HUB_ROLE,
+// which Command sets in the same line, so the config carries no role.
+const mcpConfig = `{"mcpServers":{"hub":{"command":"hub","args":["mcp"]}}}`
 
 // Start types the role's launch line into an existing pane at its shell prompt.
 func Start(kind, pane, prompt string) error {

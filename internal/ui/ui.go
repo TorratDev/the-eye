@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"html/template"
+	"io"
 	"net/http"
 	"sort"
 	"strconv"
@@ -15,6 +16,7 @@ import (
 	"github.com/TorratDev/the-eye/internal/hub"
 	"github.com/TorratDev/the-eye/internal/ingest"
 	"github.com/TorratDev/the-eye/internal/live"
+	"github.com/TorratDev/the-eye/internal/report"
 	"github.com/TorratDev/the-eye/internal/session"
 )
 
@@ -161,9 +163,10 @@ var page = template.Must(template.New("page").Parse(`<!doctype html>
 <div id="dashboard" hx-ext="sse" sse-connect="/events" sse-swap="state">{{.}}</div>
 </body></html>`))
 
-// Handler serves the page, the hook endpoint and the live stream. A stored hook event is
-// published to every connected page as a new sessions table.
-func Handler(st *hub.Store, b *live.Broker) http.Handler {
+// Handler serves the page, the hook endpoint, the live stream and the report endpoint. A stored hook
+// event is published to every connected page as a new sessions table. c posts report comments; with
+// nil, POST /report refuses.
+func Handler(st *hub.Store, b *live.Broker, c report.Commenter) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		frag, err := SessionsFragment(st)
@@ -178,6 +181,26 @@ func Handler(st *hub.Store, b *live.Broker) http.Handler {
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write(buf.Bytes())
+	})
+	mux.HandleFunc("POST /report", func(w http.ResponseWriter, r *http.Request) {
+		if c == nil {
+			http.Error(w, "no GitHub commenter configured", http.StatusServiceUnavailable)
+			return
+		}
+		var body struct {
+			Issue   int    `json:"issue"`
+			Status  string `json:"status"`
+			Summary string `json:"summary"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&body); err != nil {
+			http.Error(w, "body is not a report", http.StatusBadRequest)
+			return
+		}
+		if err := report.Submit(st, c, body.Issue, r.Header.Get("X-Hub-Role"), body.Status, body.Summary); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
 	})
 	mux.Handle("POST /hooks", ingest.Handler(st, func(hub.Event) {
 		if frag, err := SessionsFragment(st); err == nil {
