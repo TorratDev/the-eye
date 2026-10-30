@@ -241,3 +241,45 @@ func (s *Store) SubIssueForPane(pane string) (int, error) {
 	}
 	return n, err
 }
+
+// RecentAlerts returns the newest tool failures and permission prompts, newest first.
+func (s *Store) RecentAlerts(limit int) ([]Event, error) {
+	rows, err := s.db.Query(`SELECT received_at, hook, role, pane, COALESCE(session, ''), COALESCE(payload, '')
+		FROM events WHERE hook IN ('PostToolUseFailure', 'Notification') ORDER BY id DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Event
+	for rows.Next() {
+		var e Event
+		var at string
+		if err := rows.Scan(&at, &e.Hook, &e.Role, &e.Pane, &e.Session, &e.Payload); err != nil {
+			return nil, err
+		}
+		if e.ReceivedAt, err = time.Parse(time.RFC3339Nano, at); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
+// TaskNumbersByState groups sub-issue numbers by their stored state, e.g. ready, claimed, merged.
+func (s *Store) TaskNumbersByState() (map[string][]int, error) {
+	rows, err := s.db.Query(`SELECT COALESCE(state, ''), number FROM tasks WHERE state IS NOT NULL AND state != '' ORDER BY number`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string][]int{}
+	for rows.Next() {
+		var state string
+		var n int
+		if err := rows.Scan(&state, &n); err != nil {
+			return nil, err
+		}
+		out[state] = append(out[state], n)
+	}
+	return out, rows.Err()
+}
