@@ -88,3 +88,32 @@ func TestEpicReportsGraphQLErrors(t *testing.T) {
 		t.Fatalf("err = %v, want the GraphQL error", err)
 	}
 }
+
+func TestEpicRefusesMoreThanAPageOfLabelsOrAssignees(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, `{"data":{"repository":{"issue":{"subIssues":{
+			"pageInfo":{"hasNextPage":false,"endCursor":""},
+			"nodes":[{"number":2,"title":"two","state":"OPEN",
+				"labels":{"pageInfo":{"hasNextPage":true,"endCursor":"l1"},"nodes":[{"name":"a"}]},
+				"assignees":{"pageInfo":{"hasNextPage":false},"nodes":[]},
+				"blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}]}}}}}`)
+	}))
+	defer srv.Close()
+
+	c := &Client{URL: srv.URL, Token: "t", HTTP: srv.Client()}
+	if _, err := c.Epic("TorratDev", "the-eye", 1); err == nil || !strings.Contains(err.Error(), "refusing a partial read") {
+		t.Fatalf("err = %v, want a partial-read refusal", err)
+	}
+}
+
+func TestBlockersAfterReportsMissingIssue(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, `{"data":{"repository":{"issue":null}}}`)
+	}))
+	defer srv.Close()
+
+	c := &Client{URL: srv.URL, Token: "t", HTTP: srv.Client()}
+	if _, err := c.blockersAfter("TorratDev", "the-eye", 2, "b1"); err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("err = %v, want issue not found", err)
+	}
+}
