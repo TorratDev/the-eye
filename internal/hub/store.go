@@ -283,3 +283,10 @@ func (s *Store) TaskNumbersByState() (map[string][]int, error) {
 	}
 	return out, rows.Err()
 }
+
+// SetState sets only the state of a sub-issue, creating its row if needed.
+func (s *Store) SetState(number int, state string) error {
+	_, err := s.db.Exec(`INSERT INTO tasks (number, state) VALUES (?, ?)
+		ON CONFLICT(number) DO UPDATE SET state = excluded.state`, number, state)
+	return err
+}
