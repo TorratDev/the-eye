@@ -28,9 +28,10 @@ type Tab struct {
 }
 
 type Pane struct {
-	ID    string `json:"pane_id"`
-	TabID string `json:"tab_id"`
-	Label string `json:"label"`
+	ID          string `json:"pane_id"`
+	TabID       string `json:"tab_id"`
+	Label       string `json:"label"`
+	AgentStatus string `json:"agent_status"` // idle, working, blocked, done or unknown
 }
 
 // Version returns the installed herdr version, e.g. "0.9.5".
@@ -152,4 +153,16 @@ func PaneList(workspace string) ([]Pane, error) {
 func PaneRename(pane, label string) error {
 	_, err := call("pane", "rename", pane, label)
 	return err
+}
+
+// PaneGet returns one pane, including its agent status.
+func PaneGet(pane string) (Pane, error) {
+	res, err := call("pane", "get", pane)
+	if err != nil {
+		return Pane{}, err
+	}
+	var v struct {
+		Pane Pane `json:"pane"`
+	}
+	return v.Pane, json.Unmarshal(res, &v)
 }
