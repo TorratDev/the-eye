@@ -24,11 +24,13 @@ type Workspace struct {
 type Tab struct {
 	ID          string `json:"tab_id"`
 	WorkspaceID string `json:"workspace_id"`
+	Label       string `json:"label"`
 }
 
 type Pane struct {
 	ID    string `json:"pane_id"`
 	TabID string `json:"tab_id"`
+	Label string `json:"label"`
 }
 
 // Version returns the installed herdr version, e.g. "0.9.5".
@@ -120,4 +122,34 @@ func PaneRun(pane string, command ...string) error {
 func AgentRead(target string, lines int) (string, error) {
 	out, err := exec.Command(Bin, "agent", "read", target, "--source", "recent", "--lines", fmt.Sprint(lines)).Output()
 	return string(out), err
+}
+
+// TabList returns the tabs of one workspace.
+func TabList(workspace string) ([]Tab, error) {
+	res, err := call("tab", "list", "--workspace", workspace)
+	if err != nil {
+		return nil, err
+	}
+	var v struct {
+		Tabs []Tab `json:"tabs"`
+	}
+	return v.Tabs, json.Unmarshal(res, &v)
+}
+
+// PaneList returns the panes of one workspace.
+func PaneList(workspace string) ([]Pane, error) {
+	res, err := call("pane", "list", "--workspace", workspace)
+	if err != nil {
+		return nil, err
+	}
+	var v struct {
+		Panes []Pane `json:"panes"`
+	}
+	return v.Panes, json.Unmarshal(res, &v)
+}
+
+// PaneRename sets a pane's label.
+func PaneRename(pane, label string) error {
+	_, err := call("pane", "rename", pane, label)
+	return err
 }
