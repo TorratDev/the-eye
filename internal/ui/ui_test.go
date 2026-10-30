@@ -20,7 +20,7 @@ func TestPermissionPromptReachesClient(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer st.Close()
-	srv := httptest.NewServer(Handler(st, live.NewBroker()))
+	srv := httptest.NewServer(Handler(st, live.NewBroker(), nil))
 	defer srv.Close()
 
 	// connect first; the snapshot comes before any event

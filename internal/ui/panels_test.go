@@ -51,7 +51,7 @@ func TestToolErrorReachesClient(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer st.Close()
-	srv := httptest.NewServer(Handler(st, live.NewBroker()))
+	srv := httptest.NewServer(Handler(st, live.NewBroker(), nil))
 	defer srv.Close()
 
 	res, err := http.Get(srv.URL + "/events")

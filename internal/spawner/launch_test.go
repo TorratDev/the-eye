@@ -34,3 +34,16 @@ func TestExecutorCanEdit(t *testing.T) {
 		t.Error("executor cannot edit")
 	}
 }
+
+// Every role's session runs the hub's report tool through --mcp-config.
+func TestEveryRoleHasReportTool(t *testing.T) {
+	for kind := range launches {
+		cmd, err := Command(kind, "p1", "x")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(cmd, "--mcp-config") || !strings.Contains(cmd, `"command":"hub"`) {
+			t.Errorf("%s launch line lacks the hub report server: %s", kind, cmd)
+		}
+	}
+}
