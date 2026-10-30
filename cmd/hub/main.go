@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -9,7 +11,9 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/TorratDev/the-eye/internal/cloud"
 	"github.com/TorratDev/the-eye/internal/hub"
 	"github.com/TorratDev/the-eye/internal/live"
 	"github.com/TorratDev/the-eye/internal/ui"
@@ -63,6 +67,9 @@ func run(args []string) error {
 func serve(args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	addr := fs.String("addr", "127.0.0.1:8080", "listen address; keep it on localhost")
+	epic := fs.Int("epic", 0, "epic whose cloud reports to poll from GitHub (0: no polling)")
+	poll := fs.Duration("poll", 30*time.Second, "how often to poll cloud reports")
+	repoFlag := fs.String("repo", "", "owner/name (default: origin remote)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -71,8 +78,78 @@ func serve(args []string) error {
 		return err
 	}
 	defer st.Close()
+	broker := live.NewBroker()
+	if *epic > 0 {
+		repo := *repoFlag
+		if repo == "" {
+			if repo, err = originRepo(); err != nil {
+				return err
+			}
+		}
+		owner, name, err := parseRepo(repo)
+		if err != nil {
+			return err
+		}
+		go pollCloud(st, broker, owner+"/"+name, owner, name, *epic, *poll)
+	}
 	fmt.Printf("hub: serving on http://%s (state in %s)\n", *addr, stateFile)
-	return http.ListenAndServe(*addr, ui.Handler(st, live.NewBroker()))
+	return http.ListenAndServe(*addr, ui.Handler(st, broker))
+}
+
+// pollCloud reads the epic's open sub-issues every interval and applies new cloud reports.
+// Outcomes the orchestrator or the operator must see are recorded as events and published.
+func pollCloud(st *hub.Store, broker *live.Broker, repo, owner, name string, epic int, every time.Duration) {
+	token, err := hub.GhToken()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "hub: cloud poll disabled:", err)
+		return
+	}
+	client := &hub.Client{URL: graphQL, Token: token}
+	p := &cloud.Poller{
+		Store: st,
+		Repo:  repo,
+		Fetch: cloud.FetchComments,
+		Issues: func() ([]int, error) {
+			issues, err := client.Epic(owner, name, epic)
+			if err != nil {
+				return nil, err
+			}
+			var open []int
+			for _, i := range issues {
+				if i.State == "OPEN" {
+					open = append(open, i.Number)
+				}
+			}
+			return open, nil
+		},
+		OnOutcome: func(issue int, out cloud.Outcome) {
+			for _, text := range out.Routed {
+				recordAlert(st, broker, issue, "cloud BLOCKED", text)
+			}
+			for _, text := range out.Refused {
+				recordAlert(st, broker, issue, "cloud report refused", text)
+			}
+		},
+		OnError: func(issue int, err error) {
+			fmt.Fprintf(os.Stderr, "hub: cloud poll #%d: %v\n", issue, err)
+		},
+	}
+	if err := p.Run(context.Background(), every); err != nil {
+		fmt.Fprintln(os.Stderr, "hub: cloud poll stopped:", err)
+	}
+}
+
+// recordAlert stores a cloud finding as a prompt-style event, so the errors panel shows it, and publishes the page.
+func recordAlert(st *hub.Store, broker *live.Broker, issue int, what, text string) {
+	payload, _ := json.Marshal(map[string]string{"message": fmt.Sprintf("#%d %s: %s", issue, what, text)})
+	err := st.RecordEvent(hub.Event{ReceivedAt: time.Now(), Hook: "Notification", Role: "cloud", Pane: fmt.Sprintf("cloud-%d", issue), Payload: string(payload)})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "hub: record cloud finding:", err)
+		return
+	}
+	if frag, err := ui.SessionsFragment(st); err == nil {
+		broker.Publish("state", frag)
+	}
 }
 
 // sync prints every sub-issue with its state, blockers and ready flag. It dispatches nothing.
