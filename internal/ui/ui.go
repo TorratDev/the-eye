@@ -4,9 +4,12 @@ package ui
 
 import (
 	"bytes"
+	"encoding/json"
 	"html/template"
 	"net/http"
 	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/TorratDev/the-eye/internal/hub"
@@ -46,19 +49,103 @@ func Rows(st *hub.Store) ([]Row, error) {
 	return rows, nil
 }
 
-var fragment = template.Must(template.New("sessions").Parse(`<table>
-<thead><tr><th>Role</th><th>Pane</th><th>State</th><th>Sub-issue</th><th>Last event</th></tr></thead>
-<tbody>{{range .}}<tr><td>{{.Role}}</td><td>{{.Pane}}</td><td>{{.State}}</td><td>{{if .Issue}}#{{.Issue}}{{else}}-{{end}}</td><td>{{.At.Format "15:04:05"}}</td></tr>{{else}}<tr><td colspan="5">no sessions yet</td></tr>{{end}}</tbody>
-</table>`))
+// Alert is one tool failure or permission prompt in the errors panel.
+type Alert struct {
+	At     time.Time
+	Role   string
+	Pane   string
+	Kind   string // "tool error" or "prompt"
+	Detail string
+}
 
-// SessionsFragment is the table the page and each live update carry.
+// Alerts builds the errors panel: the newest tool failures and prompts, newest first.
+func Alerts(st *hub.Store, limit int) ([]Alert, error) {
+	events, err := st.RecentAlerts(limit)
+	if err != nil {
+		return nil, err
+	}
+	var out []Alert
+	for _, e := range events {
+		a := Alert{At: e.ReceivedAt, Role: e.Role, Pane: e.Pane, Kind: "prompt", Detail: detail(e.Payload)}
+		if e.Hook == "PostToolUseFailure" {
+			a.Kind = "tool error"
+		}
+		out = append(out, a)
+	}
+	return out, nil
+}
+
+// detail takes the readable part of a hook payload: the error, the prompt message or the tool name.
+func detail(payload string) string {
+	var p map[string]any
+	if json.Unmarshal([]byte(payload), &p) != nil {
+		return ""
+	}
+	for _, key := range []string{"error", "message", "tool_name"} {
+		if v, ok := p[key].(string); ok && v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// Progress is the count of sub-issues in each state, with their numbers.
+func Progress(st *hub.Store) (map[string][]int, error) {
+	return st.TaskNumbersByState()
+}
+
+var dashboard = template.Must(template.New("dashboard").Parse(`<h2>Errors and prompts</h2>
+<table>
+<thead><tr><th>Time</th><th>Role</th><th>Pane</th><th>Kind</th><th>Detail</th></tr></thead>
+<tbody>{{range .Alerts}}<tr><td>{{.At.Format "15:04:05"}}</td><td>{{.Role}}</td><td>{{.Pane}}</td><td>{{.Kind}}</td><td>{{.Detail}}</td></tr>{{else}}<tr><td colspan="5">none</td></tr>{{end}}</tbody>
+</table>
+<h2>Sessions</h2>
+<table>
+<thead><tr><th>Role</th><th>Pane</th><th>State</th><th>Sub-issue</th><th>Last event</th></tr></thead>
+<tbody>{{range .Rows}}<tr><td>{{.Role}}</td><td>{{.Pane}}</td><td>{{.State}}</td><td>{{if .Issue}}#{{.Issue}}{{else}}-{{end}}</td><td>{{.At.Format "15:04:05"}}</td></tr>{{else}}<tr><td colspan="5">no sessions yet</td></tr>{{end}}</tbody>
+</table>
+<h2>Progress</h2>
+<ul>{{range .Progress}}<li>{{.State}}: {{.Issues}}</li>{{else}}<li>no sub-issues tracked</li>{{end}}</ul>`))
+
+type progressLine struct {
+	State  string
+	Issues string
+}
+
+// SessionsFragment is what the page and each live update carry: errors, sessions and progress.
 func SessionsFragment(st *hub.Store) (string, error) {
 	rows, err := Rows(st)
 	if err != nil {
 		return "", err
 	}
+	alerts, err := Alerts(st, 20)
+	if err != nil {
+		return "", err
+	}
+	byState, err := Progress(st)
+	if err != nil {
+		return "", err
+	}
+	var lines []progressLine
+	states := make([]string, 0, len(byState))
+	for s := range byState {
+		states = append(states, s)
+	}
+	sort.Strings(states)
+	for _, s := range states {
+		var nums []string
+		for _, n := range byState[s] {
+			nums = append(nums, "#"+strconv.Itoa(n))
+		}
+		lines = append(lines, progressLine{State: s, Issues: strings.Join(nums, ", ")})
+	}
 	var buf bytes.Buffer
-	if err := fragment.Execute(&buf, rows); err != nil {
+	err = dashboard.Execute(&buf, struct {
+		Rows     []Row
+		Alerts   []Alert
+		Progress []progressLine
+	}{rows, alerts, lines})
+	if err != nil {
 		return "", err
 	}
 	return buf.String(), nil
@@ -71,7 +158,7 @@ var page = template.Must(template.New("page").Parse(`<!doctype html>
 <script src="https://unpkg.com/htmx.org@1.9.12/dist/ext/sse.js"></script>
 </head><body>
 <h1>Sessions</h1>
-<div id="sessions" hx-ext="sse" sse-connect="/events" sse-swap="state">{{.}}</div>
+<div id="dashboard" hx-ext="sse" sse-connect="/events" sse-swap="state">{{.}}</div>
 </body></html>`))
 
 // Handler serves the page, the hook endpoint and the live stream. A stored hook event is
