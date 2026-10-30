@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"os"
 	"path/filepath"
+	"time"
 
 	_ "modernc.org/sqlite" // store choice: modernc.org/sqlite, pure Go, no cgo
 )
@@ -22,6 +23,15 @@ const schema = `CREATE TABLE IF NOT EXISTS tasks (
 	revise_count INTEGER NOT NULL DEFAULT 0,
 	worktree     TEXT,
 	pane         TEXT
+);
+CREATE TABLE IF NOT EXISTS events (
+	id          INTEGER PRIMARY KEY AUTOINCREMENT,
+	received_at TEXT NOT NULL,
+	hook        TEXT NOT NULL,
+	role        TEXT NOT NULL,
+	pane        TEXT NOT NULL,
+	session     TEXT,
+	payload     TEXT
 )`
 
 // OpenStore opens or creates the SQLite file at path.
@@ -135,4 +145,44 @@ func (s *Store) Task(number int) (Task, error) {
 		return Task{}, nil
 	}
 	return t, err
+}
+
+// Event is one hook event as the hub stored it.
+type Event struct {
+	ReceivedAt time.Time
+	Hook       string
+	Role       string
+	Pane       string
+	Session    string
+	Payload    string
+}
+
+// RecordEvent stores one hook event.
+func (s *Store) RecordEvent(e Event) error {
+	_, err := s.db.Exec(`INSERT INTO events (received_at, hook, role, pane, session, payload) VALUES (?, ?, ?, ?, ?, ?)`,
+		e.ReceivedAt.UTC().Format(time.RFC3339Nano), e.Hook, e.Role, e.Pane, e.Session, e.Payload)
+	return err
+}
+
+// Events returns the stored events for one pane, oldest first.
+func (s *Store) Events(pane string) ([]Event, error) {
+	rows, err := s.db.Query(`SELECT received_at, hook, role, pane, COALESCE(session, ''), COALESCE(payload, '')
+		FROM events WHERE pane = ? ORDER BY id`, pane)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Event
+	for rows.Next() {
+		var e Event
+		var at string
+		if err := rows.Scan(&at, &e.Hook, &e.Role, &e.Pane, &e.Session, &e.Payload); err != nil {
+			return nil, err
+		}
+		if e.ReceivedAt, err = time.Parse(time.RFC3339Nano, at); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
 }
