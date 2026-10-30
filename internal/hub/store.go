@@ -32,6 +32,14 @@ CREATE TABLE IF NOT EXISTS events (
 	pane        TEXT NOT NULL,
 	session     TEXT,
 	payload     TEXT
+);
+CREATE TABLE IF NOT EXISTS reports (
+	id         INTEGER PRIMARY KEY AUTOINCREMENT,
+	created_at TEXT NOT NULL,
+	issue      INTEGER NOT NULL,
+	role       TEXT NOT NULL,
+	status     TEXT NOT NULL,
+	summary    TEXT NOT NULL
 )`
 
 // OpenStore opens or creates the SQLite file at path.
@@ -185,4 +193,18 @@ func (s *Store) Events(pane string) ([]Event, error) {
 		out = append(out, e)
 	}
 	return out, rows.Err()
+}
+
+// RecordReport stores one status report a session made with the report tool.
+func (s *Store) RecordReport(issue int, role, status, summary string) error {
+	_, err := s.db.Exec(`INSERT INTO reports (created_at, issue, role, status, summary) VALUES (?, ?, ?, ?, ?)`,
+		time.Now().UTC().Format(time.RFC3339Nano), issue, role, status, summary)
+	return err
+}
+
+// Reports returns the stored report count for one sub-issue.
+func (s *Store) Reports(issue int) (int, error) {
+	var n int
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM reports WHERE issue = ?`, issue).Scan(&n)
+	return n, err
 }
