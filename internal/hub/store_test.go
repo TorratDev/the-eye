@@ -3,9 +3,9 @@ package hub
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
-	"strings"
 	"testing"
 )
 
