@@ -84,3 +84,39 @@ func TestPlanClaimedAndClosedAreNotReady(t *testing.T) {
 		t.Fatalf("ready = %v, want [2]", got)
 	}
 }
+
+// 1 is blocked by 2 and 3, 2 by 1, 3 by 2: all three hold each other up.
+func TestPlanCycleReportsEveryMember(t *testing.T) {
+	issues := []Issue{
+		open(1, Ref{Number: 2, State: "OPEN"}, Ref{Number: 3, State: "OPEN"}),
+		open(2, Ref{Number: 1, State: "OPEN"}),
+		open(3, Ref{Number: 2, State: "OPEN"}),
+	}
+	verdicts, cycles := Plan(issues, nil)
+	if len(cycles) != 1 || !slices.Equal(cycles[0], []int{1, 2, 3}) {
+		t.Fatalf("cycles = %v, want [[1 2 3]]", cycles)
+	}
+	for _, v := range verdicts {
+		if !v.Cycle {
+			t.Fatalf("#%d Cycle = false, want true", v.Issue.Number)
+		}
+	}
+}
+
+// A closed issue cannot hold anything up, so it breaks the cycle.
+func TestPlanClosedIssueBreaksCycle(t *testing.T) {
+	issues := []Issue{
+		{Number: 1, State: "CLOSED", BlockedBy: []Ref{{Number: 2, State: "OPEN"}}},
+		open(2, Ref{Number: 1, State: "CLOSED"}),
+	}
+	verdicts, cycles := Plan(issues, nil)
+	if len(cycles) != 0 {
+		t.Fatalf("cycles = %v, want none", cycles)
+	}
+	if verdicts[1].Cycle {
+		t.Fatal("#2 Cycle = true, want false")
+	}
+	if got := readyNumbers(verdicts); !slices.Equal(got, []int{2}) {
+		t.Fatalf("ready = %v, want [2]", got)
+	}
+}
