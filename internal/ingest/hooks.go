@@ -3,6 +3,7 @@ package ingest
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -36,6 +37,10 @@ func Handler(st *hub.Store, onEvent func(hub.Event)) http.Handler {
 			return
 		}
 		e, err := parse(r.Header.Get("X-Hub-Role"), r.Header.Get("X-Hub-Pane"), raw)
+		if errors.Is(err, errIdlePrompt) {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -52,6 +57,10 @@ func Handler(st *hub.Store, onEvent func(hub.Event)) http.Handler {
 	})
 }
 
+// errIdlePrompt marks the Notification Claude Code sends after a session sits idle. It is not a
+// question for the human, and Stop already marks the session idle, so it is dropped.
+var errIdlePrompt = errors.New("idle prompt notification")
+
 // parse checks one hook event and turns it into a stored event.
 func parse(role, pane string, raw []byte) (hub.Event, error) {
 	if !slices.Contains(roles, role) {
@@ -63,12 +72,16 @@ func parse(role, pane string, raw []byte) (hub.Event, error) {
 	var body struct {
 		HookEventName string `json:"hook_event_name"`
 		SessionID     string `json:"session_id"`
+		Notification  string `json:"notification_type"`
 	}
 	if err := json.Unmarshal(raw, &body); err != nil {
 		return hub.Event{}, fmt.Errorf("body is not JSON: %w", err)
 	}
 	if !slices.Contains(hooks, body.HookEventName) {
 		return hub.Event{}, fmt.Errorf("hook %q is not stored", body.HookEventName)
+	}
+	if body.HookEventName == "Notification" && body.Notification == "idle_prompt" {
+		return hub.Event{}, errIdlePrompt
 	}
 	return hub.Event{Hook: body.HookEventName, Role: role, Pane: pane, Session: body.SessionID, Payload: string(raw)}, nil
 }

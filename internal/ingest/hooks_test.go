@@ -1,6 +1,7 @@
 package ingest
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -55,5 +56,15 @@ func TestRefusesBadEvents(t *testing.T) {
 		if _, err := parse(c.role, c.pane, []byte(c.body)); err == nil {
 			t.Errorf("%s: accepted, want error", name)
 		}
+	}
+}
+
+// The idle prompt is not stored, so it never shows as blocked; a permission prompt still is.
+func TestIdlePromptDropped(t *testing.T) {
+	if _, err := parse("orchestrator", "p2", []byte(`{"hook_event_name":"Notification","notification_type":"idle_prompt"}`)); !errors.Is(err, errIdlePrompt) {
+		t.Errorf("idle prompt: err = %v, want errIdlePrompt", err)
+	}
+	if _, err := parse("orchestrator", "p2", []byte(`{"hook_event_name":"Notification","notification_type":"permission_prompt"}`)); err != nil {
+		t.Errorf("permission prompt refused: %v", err)
 	}
 }

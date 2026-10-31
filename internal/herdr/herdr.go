@@ -3,6 +3,7 @@
 package herdr
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os/exec"
@@ -46,6 +47,14 @@ func Version() (string, error) {
 // call runs one herdr command and returns the result object of its JSON envelope.
 func call(args ...string) (json.RawMessage, error) {
 	out, err := exec.Command(Bin, args...).Output()
+	return decode(args[0], out, err)
+}
+
+// decode reads one command's output. Some commands (pane run) print nothing on success.
+func decode(cmd string, out []byte, err error) (json.RawMessage, error) {
+	if err == nil && len(bytes.TrimSpace(out)) == 0 {
+		return nil, nil
+	}
 	var env struct {
 		Result json.RawMessage `json:"result"`
 		Error  *struct {
@@ -54,13 +63,13 @@ func call(args ...string) (json.RawMessage, error) {
 		} `json:"error"`
 	}
 	if jerr := json.Unmarshal(out, &env); jerr != nil {
-		return nil, fmt.Errorf("herdr %s: unreadable output (%v): %s", args[0], err, strings.TrimSpace(string(out)))
+		return nil, fmt.Errorf("herdr %s: unreadable output (%v): %s", cmd, err, strings.TrimSpace(string(out)))
 	}
 	if env.Error != nil {
-		return nil, fmt.Errorf("herdr %s: %s: %s", args[0], env.Error.Code, env.Error.Message)
+		return nil, fmt.Errorf("herdr %s: %s: %s", cmd, env.Error.Code, env.Error.Message)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("herdr %s: %w", args[0], err)
+		return nil, fmt.Errorf("herdr %s: %w", cmd, err)
 	}
 	return env.Result, nil
 }
