@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/TorratDev/the-eye/internal/config"
+	"github.com/TorratDev/the-eye/internal/herdr"
 	"github.com/TorratDev/the-eye/internal/prompts"
 	"github.com/TorratDev/the-eye/internal/spawner"
 )
@@ -55,6 +56,7 @@ func plan(args []string) error {
 		prompt:   func() (string, error) { return orchestratorPrompt(*cfgPath) },
 		layout:   func() (map[string]string, error) { return spawner.Ensure(epic, *cwd) },
 		serve:    func() (func() error, error) { return startServe(*o) },
+		running:  orchestratorRunning,
 		start:    spawner.StartOrchestrator,
 		send:     func(pane, text string) error { return spawner.SendWhenIdle(pane, text, 2*time.Minute) },
 	}.run(epic)
@@ -67,6 +69,7 @@ type planSteps struct {
 	prompt   func() (string, error)
 	layout   func() (map[string]string, error)
 	serve    func() (wait func() error, err error)
+	running  func(pane string) (bool, error)
 	start    func(pane, prompt string) error
 	send     func(pane, text string) error
 }
@@ -96,6 +99,16 @@ func (s planSteps) run(epic int) error {
 	if err != nil {
 		return err
 	}
+	// a re-run must not type a second launch line into a pane that already runs the orchestrator,
+	// which already has the epic from the first run
+	running, err := s.running(pane)
+	if err != nil {
+		return err
+	}
+	if running {
+		fmt.Printf("hub: orchestrator already running in pane %s; not starting another\n", pane)
+		return wait()
+	}
 	if err := s.start(pane, prompt); err != nil {
 		return err
 	}
@@ -103,6 +116,15 @@ func (s planSteps) run(epic int) error {
 		return err
 	}
 	return wait()
+}
+
+// orchestratorRunning reports whether herdr sees an agent in pane. A plain shell reports "unknown".
+func orchestratorRunning(pane string) (bool, error) {
+	p, err := herdr.PaneGet(pane)
+	if err != nil {
+		return false, err
+	}
+	return p.AgentStatus != "" && p.AgentStatus != "unknown", nil
 }
 
 // orchestratorPrompt fills prompts/orchestrator.md from the repo config at cfgPath.
