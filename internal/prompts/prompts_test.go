@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/TorratDev/the-eye/internal/cloud"
 )
 
 // The eight parts every role prompt has, in order. Each heading is "## <n>. <title>".
@@ -57,5 +59,29 @@ func TestRolePrompts(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// A cloud worker's report comment, built the way its prompt says, parses with cloud.ParseComment.
+func TestCloudReportContract(t *testing.T) {
+	finals := map[string]string{
+		"executor":     "DONE: added the check; verification: go test ok; branch: 12-check",
+		"reviewer":     "PASS: the diff meets the objective",
+		"investigator": "BLOCKED: no access to the log",
+	}
+	for role, final := range finals {
+		raw, err := os.ReadFile(filepath.Join("..", "..", "prompts", role+".md"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := string(raw)
+		if !strings.Contains(text, cloud.Marker) || !strings.Contains(text, "role: "+role) {
+			t.Errorf("%s: cloud section lacks the marker or role line", role)
+		}
+		comment := cloud.Marker + "\nrole: " + role + "\nsome detail\n" + final
+		r, ok, err := cloud.ParseComment(comment)
+		if err != nil || !ok || r.Role != role {
+			t.Errorf("%s: ParseComment = %+v, %v, %v", role, r, ok, err)
+		}
 	}
 }

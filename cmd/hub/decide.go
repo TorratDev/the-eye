@@ -111,7 +111,7 @@ func liveDeps(st *hub.Store, broker *live.Broker, repo, repoDir, worktreeRoot st
 			if !running {
 				role, _, _ := strings.Cut(names[pane], "-")
 				// a session the hub ran here before (lost to a herdr restart) is resumed, not restarted
-				resume, err := st.LastSession(pane)
+				resume, err := st.LastSessionByName(names[pane])
 				if err != nil {
 					return err
 				}

@@ -53,6 +53,17 @@ Call the `report` tool with the verdict and its reason. Then end your reply with
 
 `PASS: <reason>`, `REVISE: <one specific change>`, `SPLIT: <part to move into a follow-up issue>` or `ESCALATE: <why a human must decide>`
 
+### Cloud workers
+
+A cloud worker has no hub on its machine and cannot call `report`. Post one GitHub comment on the sub-issue instead, in this shape. The hub reads only comments that start with the marker:
+
+```
+<!-- hub:worker-report -->
+role: reviewer
+<reason, as many lines as needed>
+<the final line above, exactly>
+```
+
 ## 8. Stop and cleanup
 
 Release any resource you started (the repo rules say how). Then wait for the next review.

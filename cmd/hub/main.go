@@ -97,6 +97,19 @@ func serve(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	// the page can start an epic; without a repo the form says so
+	repo := o.repo
+	if repo == "" {
+		repo, _ = originRepo()
+	}
+	h, err := newEpicHost(repo, "", "", o.poll)
+	if err != nil {
+		// a non-GitHub origin only disables the epic form; serve still runs
+		fmt.Fprintln(os.Stderr, "hub: epic form disabled:", err)
+		h, _ = newEpicHost("", "", "", o.poll)
+	}
+	o.onEvent = h.wire
+	o.startEpic = h.startFromPage
 	wait, err := startServe(*o)
 	if err != nil {
 		return err
@@ -109,6 +122,7 @@ type serveOpts struct {
 	epic       int
 	poll       time.Duration
 	onEvent    func(st *hub.Store, broker *live.Broker) func(hub.Event) // optional; built once the store is open
+	startEpic  func(epic int) error                                     // optional; the page's epic form
 }
 
 // serveFlags registers the flags serve and plan share.
@@ -161,7 +175,7 @@ func startServe(o serveOpts) (wait func() error, err error) {
 		onEvent = o.onEvent(st, broker)
 	}
 	go func() {
-		errc <- http.Serve(ln, ui.Handler(st, broker, commenter, onEvent, ui.Actions{Send: sendFromPage, Answer: spawner.AnswerPrompt}))
+		errc <- http.Serve(ln, ui.Handler(st, broker, commenter, onEvent, ui.Actions{Send: sendFromPage, Answer: spawner.AnswerPrompt, StartEpic: o.startEpic}))
 	}()
 	return func() error {
 		defer st.Close()

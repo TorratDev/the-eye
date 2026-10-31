@@ -5,16 +5,15 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
+	"runtime"
 	"strconv"
 	"time"
 
 	"github.com/TorratDev/the-eye/internal/config"
 	"github.com/TorratDev/the-eye/internal/herdr"
 	"github.com/TorratDev/the-eye/internal/hub"
-	"github.com/TorratDev/the-eye/internal/live"
 	"github.com/TorratDev/the-eye/internal/prompts"
-	"github.com/TorratDev/the-eye/internal/report"
-	"github.com/TorratDev/the-eye/internal/spawner"
 )
 
 const planUsage = "usage: hub plan [--repo owner/name] [--config repos/<name>.md] [--cwd dir] <epic>"
@@ -41,93 +40,32 @@ func plan(args []string) error {
 			return err
 		}
 	}
-	owner, name, err := parseRepo(o.repo)
+	h, err := newEpicHost(o.repo, *cfgPath, *cwd, o.poll)
 	if err != nil {
 		return err
 	}
-	if *cfgPath == "" {
-		*cfgPath = "repos/" + name + ".md"
-	}
-	if *cwd == "" {
-		if *cwd, err = os.Getwd(); err != nil {
-			return err
+	o.onEvent = h.wire
+	o.startEpic = h.startFromPage
+	return h.start(epic, func() (func() error, error) {
+		wait, err := startServe(*o)
+		if err == nil {
+			openPage("http://" + o.addr)
 		}
+		return wait, err
+	})
+}
+
+// openPage opens url in the default browser. It is a convenience: a machine with no browser
+// is not an error, so a failure is skipped quietly.
+func openPage(url string) {
+	name := "xdg-open"
+	if runtime.GOOS == "darwin" {
+		name = "open"
 	}
-	var cfg config.Config
-	var rendered map[string]string
-	var store *hub.Store // set once serve has opened it
-	var fwd *forwarder   // set once serve has opened the store
-	announced := map[int]bool{}
-	var handoff string
-	return planSteps{
-		sync: func() error {
-			verdicts, err := sync(owner, name, epic)
-			// the hand-off names the ready sub-issues; the watcher announces only later ones
-			handoff = fmt.Sprintf("Epic #%d.", epic)
-			if ready := newlyReady(verdicts, announced); len(ready) > 0 {
-				handoff += " Ready to plan: " + refList(ready) + "."
-			}
-			return err
-		},
-		baseline: spawner.Baseline,
-		prompt: func() (string, error) {
-			if cfg, err = config.Load(*cfgPath); err != nil {
-				return "", err
-			}
-			if rendered, err = rolePrompts(cfg); err != nil {
-				return "", err
-			}
-			return rendered["orchestrator"], nil
-		},
-		layout: func() (map[string]string, error) { return spawner.Ensure(epic, *cwd) },
-		serve: func(panes map[string]string) (func() error, error) {
-			o.onEvent = func(st *hub.Store, broker *live.Broker) func(hub.Event) {
-				store = st
-				orchestrator := panes["orchestrator"]
-				fwd = newForwarder(panes,
-					func(text string) error { return spawner.SendWhenIdle(orchestrator, text, orchestratorWait) },
-					func(text string, err error) {
-						alert(st, broker, "hub", decisionsPane, fmt.Sprintf("not forwarded to the orchestrator (%v): %s", err, text))
-					})
-				go watchReady(st, owner, name, epic, o.poll, announced, fwd)
-				d := liveDeps(st, broker, owner+"/"+name, *cwd, cfg.Header["worktree_root"], epic, panes, rendered)
-				d.Assign = fwd.assign
-				act := actOnStop(d, showResult(st, broker))
-				repo := owner + "/" + name
-				rv := newReviewer(st, panes, d.Send, fwd.assign, func(n int, err error) {
-					alert(st, broker, "hub", decisionsPane, fmt.Sprintf("review of #%d: %v", n, err))
-				}, func(ex spawner.ExecutorDispatch, done, verdict string) {
-					url, err := openPR(gitRun, ghRun, repo, ex, done, verdict)
-					if err != nil {
-						// the task stays approved; a later PASS for it reuses an open PR, never a second one
-						alert(st, broker, "hub", decisionsPane, fmt.Sprintf("PR for #%d not opened: %v", ex.Issue, err))
-						return
-					}
-					if err := st.SetPR(ex.Issue, url); err != nil {
-						fmt.Fprintln(os.Stderr, "hub: store PR:", err)
-					}
-					if err := (report.GhCommenter{Repo: repo}).Comment(ex.Issue, "PR opened by the hub after review: "+url); err != nil {
-						fmt.Fprintln(os.Stderr, "hub:", err)
-					}
-					fwd.note(fmt.Sprintf("[hub · #%d] PR opened: %s", ex.Issue, url))
-				}, func(n int, verdict string) {
-					fwd.note(fmt.Sprintf("[hub · #%d] REVISE %d times; latest %s. Decide the follow-up for what is left.", n, maxRevise, verdict))
-				})
-				return func(e hub.Event) {
-					act(e)
-					rv.onStop(e)
-					if !fwd.onStop(e) {
-						alert(st, broker, e.Role, e.Pane, "ended its turn without a result line")
-					}
-				}
-			}
-			return startServe(*o)
-		},
-		running: agentRunning,
-		session: func(pane string) (string, error) { return store.LastSession(pane) },
-		start:   spawner.StartOrchestrator,
-		send:    func(pane, text string) error { return spawner.SendWhenIdle(pane, handoff, 2*time.Minute) },
-	}.run(epic)
+	cmd := exec.Command(name, url)
+	if err := cmd.Start(); err == nil {
+		go cmd.Wait() // reap the opener so it does not linger as a zombie
+	}
 }
 
 // watchReady announces sub-issues that become ready after the hand-off (a blocker merged).
@@ -163,7 +101,7 @@ type planSteps struct {
 	layout   func() (map[string]string, error)
 	serve    func(panes map[string]string) (wait func() error, err error)
 	running  func(pane string) (bool, error)
-	session  func(pane string) (string, error) // the pane's last hub session, to resume
+	session  func(name string) (string, error) // the named pane's last hub session, to resume
 	start    func(pane, prompt, resume string) error
 	send     func(pane, text string) error
 }
@@ -205,7 +143,7 @@ func (s planSteps) run(epic int) error {
 	}
 	// a pane the hub ran an orchestrator in before has lost it (a herdr restart, #126): resume that
 	// session with the hub's flags; it already has the epic
-	resume, err := s.session(pane)
+	resume, err := s.session("orchestrator")
 	if err != nil {
 		return err
 	}

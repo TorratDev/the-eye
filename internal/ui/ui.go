@@ -5,6 +5,7 @@ package ui
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"html/template"
 	"io"
 	"log"
@@ -127,11 +128,17 @@ var dashboard = template.Must(template.New("dashboard").Parse(`<h2>Errors and pr
 <tbody>{{range .Rows}}<tr><td>{{.Role}}</td><td><a href="/sessions/{{.Pane}}">{{.Pane}}</a></td><td>{{.State}}</td><td>{{if .Issue}}#{{.Issue}}{{else}}-{{end}}</td><td>{{.At.Format "15:04:05"}}</td></tr>{{else}}<tr><td colspan="5">no sessions yet</td></tr>{{end}}</tbody>
 </table>
 <h2>Progress</h2>
-<ul>{{range .Progress}}<li>{{.State}}: {{.Issues}}</li>{{else}}<li>no sub-issues tracked</li>{{end}}</ul>`))
+<ul>{{range .Progress}}<li>{{.State}}: {{range $i, $c := .Issues}}{{if $i}}, {{end}}#{{$c.Number}}{{if $c.PR}} (<a href="{{$c.PR}}">PR</a>){{end}}{{end}}</li>{{else}}<li>no sub-issues tracked</li>{{end}}</ul>`))
 
 type progressLine struct {
 	State  string
-	Issues string
+	Issues []issueCell
+}
+
+// issueCell is one sub-issue on the Progress list, with its PR link when the hub has opened one.
+type issueCell struct {
+	Number int
+	PR     string
 }
 
 // SessionsFragment is what the page and each live update carry: errors, sessions and progress.
@@ -148,6 +155,10 @@ func SessionsFragment(st *hub.Store) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	prs, err := st.PRs()
+	if err != nil {
+		return "", err
+	}
 	var lines []progressLine
 	states := make([]string, 0, len(byState))
 	for s := range byState {
@@ -155,11 +166,11 @@ func SessionsFragment(st *hub.Store) (string, error) {
 	}
 	sort.Strings(states)
 	for _, s := range states {
-		var nums []string
+		var cells []issueCell
 		for _, n := range byState[s] {
-			nums = append(nums, "#"+strconv.Itoa(n))
+			cells = append(cells, issueCell{Number: n, PR: prs[n]})
 		}
-		lines = append(lines, progressLine{State: s, Issues: strings.Join(nums, ", ")})
+		lines = append(lines, progressLine{State: s, Issues: cells})
 	}
 	var buf bytes.Buffer
 	err = dashboard.Execute(&buf, struct {
@@ -180,6 +191,10 @@ var page = template.Must(template.New("page").Parse(`<!doctype html>
 <script src="https://unpkg.com/htmx.org@1.9.12/dist/ext/sse.js"></script>
 </head><body>
 <h1>Sessions</h1>
+<form hx-post="/epics" hx-target="#epic-status" hx-on::response-error="this.querySelector('#epic-status').textContent=event.detail.xhr.responseText">
+<label for="epic">Start epic #</label> <input id="epic" name="epic" type="number" min="1" required>
+<button>Start</button> <span id="epic-status" role="status"></span>
+</form>
 <div id="dashboard" hx-ext="sse" sse-connect="/events" sse-swap="state">{{.}}</div>
 </body></html>`))
 
@@ -223,6 +238,27 @@ func Handler(st *hub.Store, b *live.Broker, c report.Commenter, onEvent func(hub
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write(buf.Bytes())
+	})
+	mux.HandleFunc("POST /epics", func(w http.ResponseWriter, r *http.Request) {
+		// starting an epic runs code in herdr, so only the hub's own page may do it
+		if !fromOwnPage(r) {
+			http.Error(w, "refused: not from the hub's page", http.StatusForbidden)
+			return
+		}
+		if act.StartEpic == nil {
+			http.Error(w, "not configured: no GitHub repo", http.StatusServiceUnavailable)
+			return
+		}
+		epic, err := strconv.Atoi(r.FormValue("epic"))
+		if err != nil || epic < 1 {
+			http.Error(w, "epic must be an issue number", http.StatusBadRequest)
+			return
+		}
+		if err := act.StartEpic(epic); err != nil {
+			http.Error(w, "not started: "+err.Error(), http.StatusConflict)
+			return
+		}
+		fmt.Fprintf(w, "epic #%d started", epic)
 	})
 	mux.HandleFunc("POST /report", func(w http.ResponseWriter, r *http.Request) {
 		if c == nil {

@@ -64,6 +64,17 @@ or
 
 `BLOCKED: <what is missing, failing, or too large for one PR>`
 
+### Cloud workers
+
+A cloud worker has no hub on its machine and cannot call `report`. Post one GitHub comment on the sub-issue instead, in this shape. The hub reads only comments that start with the marker:
+
+```
+<!-- hub:worker-report -->
+role: executor
+<summary, as many lines as needed>
+<the final line above, exactly>
+```
+
 ## 8. Stop and cleanup
 
 - After the hub reports the PR is open, remove the worktree with `git -C <REPO> worktree remove <WT>`. The branch stays on the remote.

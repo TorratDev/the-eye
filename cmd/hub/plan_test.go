@@ -26,7 +26,7 @@ func fakeSteps(calls *[]string, fail string) planSteps {
 			return func() error { return step("wait") }, step("serve")
 		},
 		running: func(pane string) (bool, error) { return false, step("running " + pane) },
-		session: func(pane string) (string, error) { return "", step("session " + pane) },
+		session: func(name string) (string, error) { return "", step("session " + name) },
 		start:   func(pane, prompt, resume string) error { return step("start " + pane + " " + prompt + " " + resume) },
 		send:    func(pane, text string) error { return step("send " + pane + " " + text) },
 	}
@@ -37,7 +37,7 @@ func TestPlanOrder(t *testing.T) {
 	if err := fakeSteps(&calls, "").run(95); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"sync", "baseline", "prompt", "layout", "serve", "running p1", "session p1", "start p1 PROMPT ", "send p1 Epic #95.", "wait"}
+	want := []string{"sync", "baseline", "prompt", "layout", "serve", "running p1", "session orchestrator", "start p1 PROMPT ", "send p1 Epic #95.", "wait"}
 	if !slices.Equal(calls, want) {
 		t.Fatalf("calls = %q, want %q", calls, want)
 	}
@@ -85,4 +85,10 @@ func TestPlanResumesLostOrchestrator(t *testing.T) {
 	if want := []string{"sync", "baseline", "prompt", "layout", "serve", "running p1", "start p1 PROMPT cea7c612", "wait"}; !slices.Equal(calls, want) {
 		t.Fatalf("calls = %q, want %q", calls, want)
 	}
+}
+
+// A missing browser opener is skipped quietly, not an error.
+func TestOpenPageSkipsWithoutBrowser(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	openPage("http://127.0.0.1:8080")
 }
