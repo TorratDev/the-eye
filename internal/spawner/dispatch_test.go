@@ -45,3 +45,19 @@ func TestSendWhenIdle(t *testing.T) {
 		t.Error("herdr error swallowed")
 	}
 }
+
+// A blocked session gets Enter to allow or Esc to deny; any other state gets no key at all.
+func TestAnswerPrompt(t *testing.T) {
+	for _, c := range []struct {
+		status string
+		allow  bool
+		want   string
+	}{{"blocked", true, "enter"}, {"blocked", false, "esc"}, {"idle", true, ""}, {"working", false, ""}, {"unknown", true, ""}} {
+		var sent string
+		err := answerPrompt(func() (herdr.Pane, error) { return herdr.Pane{ID: "p6", AgentStatus: c.status}, nil },
+			func(key string) error { sent = key; return nil }, c.allow)
+		if sent != c.want || (c.want == "") != (err != nil) {
+			t.Errorf("%s allow=%v: sent %q, err %v", c.status, c.allow, sent, err)
+		}
+	}
+}

@@ -125,8 +125,9 @@ func liveDeps(st *hub.Store, broker *live.Broker, repo, repoDir, worktreeRoot st
 			return st.SetTask(n, hub.Task{State: "executing", Worktree: worktree, Pane: pane})
 		},
 		CreateIssue: func(title, body string) (int, error) { return createSubIssue(repo, epic, title, body) },
+		// on the orchestrator's own pane, so the page offers its session page to answer on
 		Escalate: func(text string) error {
-			alert(st, broker, "hub", decisionsPane, "ESCALATE "+text)
+			alert(st, broker, "orchestrator", panes["orchestrator"], "ESCALATE "+text)
 			return nil
 		},
 	}

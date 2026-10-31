@@ -44,6 +44,33 @@ var sessionPage = template.Must(template.New("session").Parse(`<!doctype html>
 </form>
 </body></html>`))
 
+// Actions are what the page may do to a session. Each one runs code in a pane.
+type Actions struct {
+	Send   func(pane, text string) error       // type a message once the session is idle
+	Answer func(pane string, allow bool) error // allow or deny the permission prompt the session waits on
+}
+
+// sessionRequest checks a request that acts on a session, and writes the refusal if it fails:
+// the action must be configured, the request must come from the hub's own page, and the pane must
+// be one the hub has hook events from.
+func sessionRequest(w http.ResponseWriter, r *http.Request, st *hub.Store, configured bool) (string, bool) {
+	// acting on a pane runs code, so only the hub's own page may do it
+	if !fromOwnPage(r) {
+		http.Error(w, "refused: not from the hub's page", http.StatusForbidden)
+		return "", false
+	}
+	if !configured {
+		http.Error(w, "not configured", http.StatusServiceUnavailable)
+		return "", false
+	}
+	pane := r.PathValue("pane")
+	if events, err := st.Events(pane); err != nil || len(events) == 0 {
+		http.Error(w, "not a session the hub knows", http.StatusNotFound)
+		return "", false
+	}
+	return pane, true
+}
+
 // fromOwnPage accepts only htmx requests from the hub's own localhost page. A cross-site form
 // cannot set HX-Request without a CORS preflight the hub never answers, and the host check stops a
 // DNS-rebound name from posting as same-origin.
@@ -104,22 +131,29 @@ func TurnsFragment(st *hub.Store, pane string) (string, error) {
 
 // sessionHandlers serves one session's page, its turns fragment and its send endpoint. The page
 // re-fetches the fragment on every live update, which a hook event (a tool call or a finished turn) triggers.
-func sessionHandlers(mux *http.ServeMux, st *hub.Store, send func(pane, text string) error) {
+func sessionHandlers(mux *http.ServeMux, st *hub.Store, act Actions) {
+	mux.HandleFunc("POST /sessions/{pane}/answer", func(w http.ResponseWriter, r *http.Request) {
+		pane, ok := sessionRequest(w, r, st, act.Answer != nil)
+		if !ok {
+			return
+		}
+		choice := r.FormValue("choice")
+		if choice != "allow" && choice != "deny" {
+			http.Error(w, "choice must be allow or deny", http.StatusBadRequest)
+			return
+		}
+		if err := act.Answer(pane, choice == "allow"); err != nil {
+			http.Error(w, "not answered: "+err.Error(), http.StatusConflict)
+			return
+		}
+		w.Write([]byte(choice + " sent"))
+	})
 	mux.HandleFunc("POST /sessions/{pane}/send", func(w http.ResponseWriter, r *http.Request) {
-		// typing into a pane runs code, so only the hub's own page may do it
-		if !fromOwnPage(r) {
-			http.Error(w, "refused: not from the hub's page", http.StatusForbidden)
+		pane, ok := sessionRequest(w, r, st, act.Send != nil)
+		if !ok {
 			return
 		}
-		if send == nil {
-			http.Error(w, "sending is not configured", http.StatusServiceUnavailable)
-			return
-		}
-		pane := r.PathValue("pane")
-		if events, err := st.Events(pane); err != nil || len(events) == 0 {
-			http.Error(w, "not a session the hub knows", http.StatusNotFound)
-			return
-		}
+		send := act.Send
 		// shortcut: one line only, since the pane gets it as typed input; allow multi-line once herdr's paste behaviour is checked
 		text := strings.Join(strings.Fields(r.FormValue("text")), " ")
 		if text == "" || len(text) > maxText {
