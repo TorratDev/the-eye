@@ -148,3 +148,17 @@ func TestFailureDoesNotStopOthers(t *testing.T) {
 		t.Errorf("failed = %v, escalated = %v; want the failure kept and the escalation sent", res.Failed, f.escalated)
 	}
 }
+
+// Act tells Assign which sub-issue each pane was sent.
+func TestActAssignsPanes(t *testing.T) {
+	f := newFakes()
+	d := f.deps()
+	got := map[string]int{}
+	d.Assign = func(issue int, pane string) { got[pane] = issue }
+	if _, err := Act("POINTS #21: A=P1\nTASK #22: slug=x | objective=y | files=a.go | verify=z | evidence=e", d); err != nil {
+		t.Fatal(err)
+	}
+	if got["investigator-a"] != 21 || got[f.idle] != 22 {
+		t.Fatalf("assigned %v", got)
+	}
+}

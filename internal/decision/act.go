@@ -17,6 +17,7 @@ type Deps struct {
 	SetTask          func(issue int, pane, worktree string) error
 	CreateIssue      func(title, body string) (int, error)
 	Escalate         func(text string) error
+	Assign           func(issue int, pane string) // optional: told which sub-issue each pane was sent
 }
 
 // Result says what Act did with one reply. Failures are kept, never dropped.
@@ -122,6 +123,9 @@ func dispatchExecutor(d Deps, ex *spawner.ExecutorDispatch, res *Result) error {
 	if err := d.SetTask(ex.Issue, pane, wt); err != nil {
 		return err
 	}
+	if d.Assign != nil {
+		d.Assign(ex.Issue, pane)
+	}
 	res.Dispatched = append(res.Dispatched, fmt.Sprintf("TASK #%d to %s", ex.Issue, pane))
 	return nil
 }
@@ -137,6 +141,9 @@ func dispatchInvestigator(d Deps, inv spawner.InvestigatorDispatch, res *Result)
 	}
 	if err := d.Send(pane, msg); err != nil {
 		return err
+	}
+	if d.Assign != nil {
+		d.Assign(inv.Issue, pane)
 	}
 	res.Dispatched = append(res.Dispatched, fmt.Sprintf("POINTS #%d %s to %s", inv.Issue, inv.Letter, pane))
 	return nil
