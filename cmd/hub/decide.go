@@ -121,8 +121,16 @@ func liveDeps(st *hub.Store, broker *live.Broker, repo, repoDir, worktreeRoot st
 			}
 			return spawner.SendWhenIdle(pane, text, 2*time.Minute)
 		},
-		SetTask: func(n int, pane, worktree string) error {
-			return st.SetTask(n, hub.Task{State: "executing", Worktree: worktree, Pane: pane})
+		SetTask: func(ex *spawner.ExecutorDispatch, pane string) error {
+			// kept so the review can be built from the same task (#132)
+			d, err := json.Marshal(ex)
+			if err != nil {
+				return err
+			}
+			if err := st.SetDispatch(ex.Issue, string(d)); err != nil {
+				return err
+			}
+			return st.SetTask(ex.Issue, hub.Task{State: "executing", Worktree: ex.Worktree, Pane: pane})
 		},
 		CreateIssue: func(title, body string) (int, error) { return createSubIssue(repo, epic, title, body) },
 		// on the orchestrator's own pane, so the page offers its session page to answer on
