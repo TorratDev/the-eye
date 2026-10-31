@@ -67,7 +67,7 @@ Each phase is tracked as an epic. "Tested" means the Go tests pass; "live" means
 | 7. Cloud workers | #40 | done, tested | the poll loop has not run against GitHub |
 
 Open items:
-- The orchestrator's reply source for `decision.Act` is not confirmed. The `Stop` hook's `transcript_path` is the likely source and needs a live check.
+- `serve` does not yet pass the orchestrator's reply (the `Stop` payload's `last_assistant_message`, see `docs/hooks.md`) to `decision.Act` (#108).
 - The channel flag is absent from the installed `claude` build, so the channel path cannot run here yet.
 - The `hub` binary must be on each session's PATH for `--mcp-config` to start the report tool.
 - Cloud workers need the report contract in their instructions; the prompts have no cloud section yet.

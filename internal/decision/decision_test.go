@@ -57,3 +57,18 @@ func TestBadTaskRefused(t *testing.T) {
 		t.Error("TASK with no objective accepted")
 	}
 }
+
+// liveReply is the orchestrator's reply from the first live run (#99), as the Stop hook's
+// last_assistant_message carried it: prose, then the decision line inside a code fence.
+const liveReply = "Epic #117 is a throwaway smoke test for the #99 live run. Its only sub-issue is #118, which lists no tasks and says to plan nothing. So there is nothing to investigate, split, or dispatch.\n\nI reported #118 as done, with the one-line summary that it has no points or task. I did not comment on either issue or touch the repo.\n\nDecision for the hub:\n\n```\nPOINTS #118: A= B= C=\n```\n\nNo `TASK`, `FOLLOWUP`, or `ESCALATE` lines. I'm stopping here since the epic is complete once the hub closes #118 by hand after the run."
+
+// "A= B= C=" starts no investigators.
+func TestLiveReplyDispatchesNothing(t *testing.T) {
+	acts, err := Route(liveReply, func(string) string { return "" })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(acts) != 0 {
+		t.Fatalf("live reply dispatched %+v", acts)
+	}
+}
