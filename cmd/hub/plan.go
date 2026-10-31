@@ -10,6 +10,8 @@ import (
 
 	"github.com/TorratDev/the-eye/internal/config"
 	"github.com/TorratDev/the-eye/internal/herdr"
+	"github.com/TorratDev/the-eye/internal/hub"
+	"github.com/TorratDev/the-eye/internal/live"
 	"github.com/TorratDev/the-eye/internal/prompts"
 	"github.com/TorratDev/the-eye/internal/spawner"
 )
@@ -50,15 +52,31 @@ func plan(args []string) error {
 			return err
 		}
 	}
+	var cfg config.Config
+	var rendered map[string]string
 	return planSteps{
 		sync:     func() error { return sync(owner, name, epic) },
 		baseline: spawner.Baseline,
-		prompt:   func() (string, error) { return orchestratorPrompt(*cfgPath) },
-		layout:   func() (map[string]string, error) { return spawner.Ensure(epic, *cwd) },
-		serve:    func() (func() error, error) { return startServe(*o) },
-		running:  orchestratorRunning,
-		start:    spawner.StartOrchestrator,
-		send:     func(pane, text string) error { return spawner.SendWhenIdle(pane, text, 2*time.Minute) },
+		prompt: func() (string, error) {
+			if cfg, err = config.Load(*cfgPath); err != nil {
+				return "", err
+			}
+			if rendered, err = rolePrompts(cfg); err != nil {
+				return "", err
+			}
+			return rendered["orchestrator"], nil
+		},
+		layout: func() (map[string]string, error) { return spawner.Ensure(epic, *cwd) },
+		serve: func(panes map[string]string) (func() error, error) {
+			o.onEvent = func(st *hub.Store, broker *live.Broker) func(hub.Event) {
+				d := liveDeps(st, broker, owner+"/"+name, *cwd, cfg.Header["worktree_root"], epic, panes, rendered)
+				return actOnStop(d, showResult(st, broker))
+			}
+			return startServe(*o)
+		},
+		running: agentRunning,
+		start:   spawner.StartOrchestrator,
+		send:    func(pane, text string) error { return spawner.SendWhenIdle(pane, text, 2*time.Minute) },
 	}.run(epic)
 }
 
@@ -68,7 +86,7 @@ type planSteps struct {
 	baseline func() error
 	prompt   func() (string, error)
 	layout   func() (map[string]string, error)
-	serve    func() (wait func() error, err error)
+	serve    func(panes map[string]string) (wait func() error, err error)
 	running  func(pane string) (bool, error)
 	start    func(pane, prompt string) error
 	send     func(pane, text string) error
@@ -95,7 +113,7 @@ func (s planSteps) run(epic int) error {
 	if pane == "" {
 		return errors.New("herdr layout has no orchestrator pane")
 	}
-	wait, err := s.serve()
+	wait, err := s.serve(panes)
 	if err != nil {
 		return err
 	}
@@ -118,8 +136,8 @@ func (s planSteps) run(epic int) error {
 	return wait()
 }
 
-// orchestratorRunning reports whether herdr sees an agent in pane. A plain shell reports "unknown".
-func orchestratorRunning(pane string) (bool, error) {
+// agentRunning reports whether herdr sees an agent in pane. A plain shell reports "unknown".
+func agentRunning(pane string) (bool, error) {
 	p, err := herdr.PaneGet(pane)
 	if err != nil {
 		return false, err
@@ -127,15 +145,18 @@ func orchestratorRunning(pane string) (bool, error) {
 	return p.AgentStatus != "" && p.AgentStatus != "unknown", nil
 }
 
-// orchestratorPrompt fills prompts/orchestrator.md from the repo config at cfgPath.
-func orchestratorPrompt(cfgPath string) (string, error) {
-	c, err := config.Load(cfgPath)
-	if err != nil {
-		return "", err
+// rolePrompts fills each role's prompt in prompts/ from the repo config, so a bad config fails
+// before any session starts.
+func rolePrompts(c config.Config) (map[string]string, error) {
+	out := map[string]string{}
+	for _, role := range []string{"orchestrator", "investigator", "executor", "reviewer"} {
+		text, err := os.ReadFile("prompts/" + role + ".md")
+		if err != nil {
+			return nil, err
+		}
+		if out[role], err = prompts.RenderRole(role, string(text), c); err != nil {
+			return nil, fmt.Errorf("%s prompt: %w", role, err)
+		}
 	}
-	text, err := os.ReadFile("prompts/orchestrator.md")
-	if err != nil {
-		return "", err
-	}
-	return prompts.RenderRole("orchestrator", string(text), c)
+	return out, nil
 }

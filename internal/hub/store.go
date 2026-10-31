@@ -246,6 +246,13 @@ func (s *Store) SubIssueForPane(pane string) (int, error) {
 	return n, err
 }
 
+// PaneBusy reports whether a sub-issue is executing in pane.
+func (s *Store) PaneBusy(pane string) (bool, error) {
+	var n int
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM tasks WHERE pane = ? AND state = 'executing'`, pane).Scan(&n)
+	return n > 0, err
+}
+
 // RecentAlerts returns the newest tool failures and permission prompts, newest first.
 func (s *Store) RecentAlerts(limit int) ([]Event, error) {
 	rows, err := s.db.Query(`SELECT received_at, hook, role, pane, COALESCE(session, ''), COALESCE(payload, '')
