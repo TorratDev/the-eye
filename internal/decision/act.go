@@ -14,7 +14,7 @@ type Deps struct {
 	FreeExecutorPane func() (string, error) // "" when every executor is busy
 	InvestigatorPane func(letter string) (string, error)
 	Send             func(pane, text string) error // SendWhenIdle in production
-	SetTask          func(issue int, pane, worktree string) error
+	SetTask          func(ex *spawner.ExecutorDispatch, pane string) error // record the task as executing in pane
 	CreateIssue      func(title, body string) (int, error)
 	Escalate         func(text string) error
 	Assign           func(issue int, pane string) // optional: told which sub-issue each pane was sent
@@ -120,7 +120,7 @@ func dispatchExecutor(d Deps, ex *spawner.ExecutorDispatch, res *Result) error {
 	if err := d.Send(pane, msg); err != nil {
 		return err
 	}
-	if err := d.SetTask(ex.Issue, pane, wt); err != nil {
+	if err := d.SetTask(ex, pane); err != nil {
 		return err
 	}
 	if d.Assign != nil {

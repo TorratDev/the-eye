@@ -2,6 +2,7 @@ package decision
 
 import (
 	"errors"
+	"github.com/TorratDev/the-eye/internal/spawner"
 	"strconv"
 	"strings"
 	"testing"
@@ -39,8 +40,8 @@ func (f *fakes) deps() Deps {
 			f.sent = append(f.sent, pane+": "+strings.SplitN(text, "\n", 2)[0])
 			return nil
 		},
-		SetTask: func(issue int, pane, wt string) error {
-			f.tasks = append(f.tasks, strings.Join([]string{strconv.Itoa(issue), pane, wt}, " "))
+		SetTask: func(ex *spawner.ExecutorDispatch, pane string) error {
+			f.tasks = append(f.tasks, strings.Join([]string{strconv.Itoa(ex.Issue), pane, ex.Worktree}, " "))
 			return nil
 		},
 		CreateIssue: func(title, body string) (int, error) {
@@ -55,7 +56,6 @@ func (f *fakes) deps() Deps {
 }
 
 func slugOf(issue int, slug string) string { return strconv.Itoa(issue) + "-" + slug }
-
 
 // A TASK block becomes one claim, one worktree and one message to an idle executor.
 func TestTaskDispatched(t *testing.T) {

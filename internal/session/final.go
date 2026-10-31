@@ -38,14 +38,20 @@ func ParseFinal(role, line string) (Final, error) {
 	return Final{}, fmt.Errorf("unparsed final line for %s: %q", role, line)
 }
 
-// TaskState is the task state an executor's DONE or BLOCKED leads to, the same states cloud
-// reports use (cloud.StateFor); "" for any other kind.
+// TaskState is the task state an executor's or reviewer's final line leads to, the same states
+// cloud reports use (cloud.StateFor); "" for any other kind.
 func TaskState(kind string) string {
 	switch kind {
 	case "DONE":
 		return "in review"
 	case "BLOCKED":
 		return "blocked"
+	case "PASS":
+		return "approved"
+	case "REVISE":
+		return "revise"
+	case "SPLIT", "ESCALATE":
+		return "escalated"
 	}
 	return ""
 }
