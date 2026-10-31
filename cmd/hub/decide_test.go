@@ -55,7 +55,7 @@ func TestStopDispatchesTask(t *testing.T) {
 			t.Error(err)
 		}
 		results <- r
-	})))
+	}), nil))
 	defer srv.Close()
 
 	postStop(t, srv.URL, "executor", "TASK #23: slug=no | objective=o | files=a.go | verify=v | evidence=e")

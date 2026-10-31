@@ -18,6 +18,7 @@ import (
 	"github.com/TorratDev/the-eye/internal/hub"
 	"github.com/TorratDev/the-eye/internal/live"
 	"github.com/TorratDev/the-eye/internal/report"
+	"github.com/TorratDev/the-eye/internal/spawner"
 	"github.com/TorratDev/the-eye/internal/ui"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -158,11 +159,17 @@ func startServe(o serveOpts) (wait func() error, err error) {
 	if o.onEvent != nil {
 		onEvent = o.onEvent(st, broker)
 	}
-	go func() { errc <- http.Serve(ln, ui.Handler(st, broker, commenter, onEvent)) }()
+	go func() { errc <- http.Serve(ln, ui.Handler(st, broker, commenter, onEvent, sendFromPage)) }()
 	return func() error {
 		defer st.Close()
 		return <-errc
 	}, nil
+}
+
+// sendFromPage types a message from the session page into a pane once it is idle. A busy pane
+// fails fast, so the page can say so instead of hanging.
+func sendFromPage(pane, text string) error {
+	return spawner.SendWhenIdle(pane, text, 30*time.Second)
 }
 
 // pollCloud reads the epic's open sub-issues every interval and applies new cloud reports.

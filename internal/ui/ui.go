@@ -1,5 +1,5 @@
 // Package ui serves the watcher page (one row per session) and a page per session with its
-// transcript, both updated live from /events. It has no controls yet.
+// transcript, both updated live from /events. A session page can send its session a message.
 package ui
 
 import (
@@ -165,10 +165,11 @@ var page = template.Must(template.New("page").Parse(`<!doctype html>
 
 // Handler serves the page, the hook endpoint, the live stream and the report endpoint. A stored hook
 // event is published to every connected page as a new sessions table, then passed to onEvent if set.
-// c posts report comments; with nil, POST /report refuses.
-func Handler(st *hub.Store, b *live.Broker, c report.Commenter, onEvent func(hub.Event)) http.Handler {
+// c posts report comments; with nil, POST /report refuses. send types a message from a session page
+// into its pane; with nil, sending refuses.
+func Handler(st *hub.Store, b *live.Broker, c report.Commenter, onEvent func(hub.Event), send func(pane, text string) error) http.Handler {
 	mux := http.NewServeMux()
-	sessionHandlers(mux, st)
+	sessionHandlers(mux, st, send)
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		frag, err := SessionsFragment(st)
 		if err != nil {

@@ -55,7 +55,7 @@ func TestSessionPage(t *testing.T) {
 		Payload: `{"transcript_path":"` + path + `"}`}); err != nil {
 		t.Fatal(err)
 	}
-	srv := httptest.NewServer(Handler(st, live.NewBroker(), nil, nil))
+	srv := httptest.NewServer(Handler(st, live.NewBroker(), nil, nil, nil))
 	defer srv.Close()
 
 	page := get(t, srv.URL+"/sessions/wH:p2")
