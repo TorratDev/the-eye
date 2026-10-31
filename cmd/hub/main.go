@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -22,7 +23,7 @@ import (
 )
 
 const (
-	usage     = "usage: hub sync [--repo owner/name] <epic>"
+	usage     = "usage: hub sync|plan [--repo owner/name] <epic>, hub serve, hub mcp"
 	stateFile = ".hub/state.db" // gitignored
 	graphQL   = "https://api.github.com/graphql"
 )
@@ -40,6 +41,9 @@ func run(args []string) error {
 	}
 	if len(args) > 0 && args[0] == "mcp" {
 		return mcpServe(args[1:])
+	}
+	if len(args) > 0 && args[0] == "plan" {
+		return plan(args[1:])
 	}
 	if len(args) == 0 || args[0] != "sync" {
 		return errors.New(usage)
@@ -86,20 +90,42 @@ func mcpServe(args []string) error {
 // serve runs the watcher page, the hook endpoint and the live stream on addr.
 func serve(args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
-	addr := fs.String("addr", "127.0.0.1:8080", "listen address; keep it on localhost")
-	epic := fs.Int("epic", 0, "epic whose cloud reports to poll from GitHub (0: no polling)")
-	poll := fs.Duration("poll", 30*time.Second, "how often to poll cloud reports")
-	repoFlag := fs.String("repo", "", "owner/name (default: origin remote)")
+	o := serveFlags(fs)
+	fs.IntVar(&o.epic, "epic", 0, "epic whose cloud reports to poll from GitHub (0: no polling)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	st, err := hub.OpenStore(stateFile)
+	wait, err := startServe(*o)
 	if err != nil {
 		return err
 	}
-	defer st.Close()
+	return wait()
+}
+
+type serveOpts struct {
+	addr, repo string
+	epic       int
+	poll       time.Duration
+}
+
+// serveFlags registers the flags serve and plan share.
+func serveFlags(fs *flag.FlagSet) *serveOpts {
+	o := &serveOpts{}
+	fs.StringVar(&o.addr, "addr", "127.0.0.1:8080", "listen address; keep it on localhost")
+	fs.DurationVar(&o.poll, "poll", 30*time.Second, "how often to poll cloud reports")
+	fs.StringVar(&o.repo, "repo", "", "owner/name (default: origin remote)")
+	return o
+}
+
+// startServe opens the store, binds addr and serves in the background, so a caller can start
+// sessions once hooks have somewhere to go. wait blocks until the server stops.
+func startServe(o serveOpts) (wait func() error, err error) {
+	st, err := hub.OpenStore(stateFile)
+	if err != nil {
+		return nil, err
+	}
 	// without a repo the report endpoint refuses, and polling cannot start
-	repo := *repoFlag
+	repo := o.repo
 	if repo == "" {
 		repo, _ = originRepo()
 	}
@@ -108,18 +134,30 @@ func serve(args []string) error {
 		commenter = report.GhCommenter{Repo: repo}
 	}
 	broker := live.NewBroker()
-	if *epic > 0 {
+	if o.epic > 0 {
 		if repo == "" {
-			return errors.New("polling needs --repo or an origin remote")
+			st.Close()
+			return nil, errors.New("polling needs --repo or an origin remote")
 		}
 		owner, name, err := parseRepo(repo)
 		if err != nil {
-			return err
+			st.Close()
+			return nil, err
 		}
-		go pollCloud(st, broker, owner+"/"+name, owner, name, *epic, *poll)
+		go pollCloud(st, broker, owner+"/"+name, owner, name, o.epic, o.poll)
 	}
-	fmt.Printf("hub: serving on http://%s (state in %s)\n", *addr, stateFile)
-	return http.ListenAndServe(*addr, ui.Handler(st, broker, commenter))
+	ln, err := net.Listen("tcp", o.addr)
+	if err != nil {
+		st.Close()
+		return nil, err
+	}
+	fmt.Printf("hub: serving on http://%s (state in %s)\n", o.addr, stateFile)
+	errc := make(chan error, 1)
+	go func() { errc <- http.Serve(ln, ui.Handler(st, broker, commenter)) }()
+	return func() error {
+		defer st.Close()
+		return <-errc
+	}, nil
 }
 
 // pollCloud reads the epic's open sub-issues every interval and applies new cloud reports.
