@@ -45,3 +45,24 @@ func sendWhenIdle(get func() (herdr.Pane, error), send func() error, timeout, po
 		time.Sleep(poll)
 	}
 }
+
+// AnswerPrompt answers the permission dialog a session waits on: Enter takes the dialog's default
+// (allow), Esc denies. It refuses unless herdr reports the pane blocked on a dialog, so the key
+// never lands in a running session or a shell.
+func AnswerPrompt(pane string, allow bool) error {
+	return answerPrompt(func() (herdr.Pane, error) { return herdr.PaneGet(pane) }, func(key string) error { return herdr.AgentSendKeys(pane, key) }, allow)
+}
+
+func answerPrompt(get func() (herdr.Pane, error), keys func(key string) error, allow bool) error {
+	p, err := get()
+	if err != nil {
+		return err
+	}
+	if p.AgentStatus != "blocked" {
+		return fmt.Errorf("pane %s is %s, not waiting on a prompt", p.ID, p.AgentStatus)
+	}
+	if allow {
+		return keys("enter")
+	}
+	return keys("esc")
+}

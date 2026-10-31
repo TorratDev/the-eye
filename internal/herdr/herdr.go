@@ -128,6 +128,12 @@ func PaneRun(pane string, command ...string) error {
 	return err
 }
 
+// AgentSendKeys sends key presses (for example "enter", "esc") to the agent in a pane.
+func AgentSendKeys(target string, keys ...string) error {
+	_, err := call(append([]string{"agent", "send-keys", target}, keys...)...)
+	return err
+}
+
 // AgentRead returns the recent terminal text of an agent pane.
 func AgentRead(target string, lines int) (string, error) {
 	out, err := exec.Command(Bin, "agent", "read", target, "--source", "recent", "--lines", fmt.Sprint(lines)).Output()

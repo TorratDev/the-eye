@@ -159,7 +159,9 @@ func startServe(o serveOpts) (wait func() error, err error) {
 	if o.onEvent != nil {
 		onEvent = o.onEvent(st, broker)
 	}
-	go func() { errc <- http.Serve(ln, ui.Handler(st, broker, commenter, onEvent, sendFromPage)) }()
+	go func() {
+		errc <- http.Serve(ln, ui.Handler(st, broker, commenter, onEvent, ui.Actions{Send: sendFromPage, Answer: spawner.AnswerPrompt}))
+	}()
 	return func() error {
 		defer st.Close()
 		return <-errc

@@ -58,6 +58,7 @@ type Alert struct {
 	Pane   string
 	Kind   string // "tool error" or "prompt"
 	Detail string
+	Answer string // "keys": allow or deny a permission prompt; "page": answer on the session page; "" for none
 }
 
 // Alerts builds the errors panel: the newest tool failures and prompts, newest first.
@@ -69,12 +70,25 @@ func Alerts(st *hub.Store, limit int) ([]Alert, error) {
 	var out []Alert
 	for _, e := range events {
 		a := Alert{At: e.ReceivedAt, Role: e.Role, Pane: e.Pane, Kind: "prompt", Detail: detail(e.Payload)}
-		if e.Hook == "PostToolUseFailure" {
+		switch {
+		case e.Hook == "PostToolUseFailure":
 			a.Kind = "tool error"
+		case notificationType(e.Payload) == "permission_prompt":
+			a.Answer = "keys"
+		case e.Role == "orchestrator" && strings.HasPrefix(a.Detail, "ESCALATE "):
+			a.Answer = "page"
 		}
 		out = append(out, a)
 	}
 	return out, nil
+}
+
+func notificationType(payload string) string {
+	var p struct {
+		Type string `json:"notification_type"`
+	}
+	json.Unmarshal([]byte(payload), &p)
+	return p.Type
 }
 
 // detail takes the readable part of a hook payload: the error, the prompt message or the tool name.
@@ -98,8 +112,13 @@ func Progress(st *hub.Store) (map[string][]int, error) {
 
 var dashboard = template.Must(template.New("dashboard").Parse(`<h2>Errors and prompts</h2>
 <table>
-<thead><tr><th>Time</th><th>Role</th><th>Pane</th><th>Kind</th><th>Detail</th></tr></thead>
-<tbody>{{range .Alerts}}<tr><td>{{.At.Format "15:04:05"}}</td><td>{{.Role}}</td><td>{{.Pane}}</td><td>{{.Kind}}</td><td>{{.Detail}}</td></tr>{{else}}<tr><td colspan="5">none</td></tr>{{end}}</tbody>
+<thead><tr><th>Time</th><th>Role</th><th>Pane</th><th>Kind</th><th>Detail</th><th>Answer</th></tr></thead>
+<tbody>{{range .Alerts}}<tr><td>{{.At.Format "15:04:05"}}</td><td>{{.Role}}</td><td>{{.Pane}}</td><td>{{.Kind}}</td><td>{{.Detail}}</td><td>
+{{- if eq .Answer "keys"}}<span hx-target="this" hx-swap="innerHTML" hx-on::response-error="this.textContent=event.detail.xhr.responseText">
+<button hx-post="/sessions/{{.Pane}}/answer" hx-vals='{"choice":"allow"}'>Allow</button>
+<button hx-post="/sessions/{{.Pane}}/answer" hx-vals='{"choice":"deny"}'>Deny</button></span>
+{{- else if eq .Answer "page"}}<a href="/sessions/{{.Pane}}">Answer</a>{{end -}}
+</td></tr>{{else}}<tr><td colspan="6">none</td></tr>{{end}}</tbody>
 </table>
 <h2>Sessions</h2>
 <table>
@@ -165,11 +184,11 @@ var page = template.Must(template.New("page").Parse(`<!doctype html>
 
 // Handler serves the page, the hook endpoint, the live stream and the report endpoint. A stored hook
 // event is published to every connected page as a new sessions table, then passed to onEvent if set.
-// c posts report comments; with nil, POST /report refuses. send types a message from a session page
-// into its pane; with nil, sending refuses.
-func Handler(st *hub.Store, b *live.Broker, c report.Commenter, onEvent func(hub.Event), send func(pane, text string) error) http.Handler {
+// c posts report comments; with nil, POST /report refuses. act holds what the page may do to a
+// session; a nil action refuses.
+func Handler(st *hub.Store, b *live.Broker, c report.Commenter, onEvent func(hub.Event), act Actions) http.Handler {
 	mux := http.NewServeMux()
-	sessionHandlers(mux, st, send)
+	sessionHandlers(mux, st, act)
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		frag, err := SessionsFragment(st)
 		if err != nil {

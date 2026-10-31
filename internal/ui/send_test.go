@@ -35,7 +35,7 @@ func TestSendFromPage(t *testing.T) {
 		got = append(got, pane+" "+text)
 		return nil
 	}
-	srv := httptest.NewServer(Handler(st, live.NewBroker(), nil, nil, send))
+	srv := httptest.NewServer(Handler(st, live.NewBroker(), nil, nil, Actions{Send: send}))
 	defer srv.Close()
 
 	post := func(pane, text string, header map[string]string) (int, string) {
