@@ -209,9 +209,8 @@ func finishFromFinalLine(st *hub.Store, e hub.Event) {
 		Reply string `json:"last_assistant_message"`
 	}
 	json.Unmarshal([]byte(e.Payload), &p)
-	lines := strings.Split(strings.TrimSpace(p.Reply), "\n")
-	f, err := session.ParseFinal(e.Role, lines[len(lines)-1])
-	if err != nil {
+	f, _, ok := session.FinalIn(e.Role, p.Reply)
+	if !ok {
 		return
 	}
 	if err := st.FinishPaneTask(e.Pane, session.TaskState(f.Kind)); err != nil {

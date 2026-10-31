@@ -76,7 +76,7 @@ Open items:
 - `hub plan` acts on the orchestrator's decisions from its `Stop` event (`last_assistant_message`, see `docs/hooks.md`). Results that need a human show on the page as a `hub` / `decisions` row. Not yet run live.
 - The channel flag is absent from the installed `claude` build (2.1.316), so the channel path cannot run here yet (#105).
 - Cloud workers' report contract is in the worker prompts (`docs/cloud-reports.md`). Polling has not run against GitHub yet (#104).
-- Nothing opens PRs yet. The PR link on the Progress list shows only PRs recorded in the store (#113).
+- The hub opens a PR when a reviewer passes a task; the Progress list links each one (#113). Not yet run live.
 - `hub plan` and the page's epic form run one epic per `serve` process; restart `serve` to run another.
 - Session resume after a herdr restart matches panes by name, but only panes laid out by a run that recorded their names (the first run after this change).
 

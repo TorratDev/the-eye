@@ -10,6 +10,7 @@ import (
 	"github.com/TorratDev/the-eye/internal/config"
 	"github.com/TorratDev/the-eye/internal/hub"
 	"github.com/TorratDev/the-eye/internal/live"
+	"github.com/TorratDev/the-eye/internal/report"
 	"github.com/TorratDev/the-eye/internal/spawner"
 )
 
@@ -170,8 +171,25 @@ func (h *epicHost) attach(epic int, panes map[string]string, announced map[int]b
 	go watchReady(h.st, h.owner, h.name, epic, h.poll, announced, fwd)
 	d := liveDeps(h.st, h.broker, h.owner+"/"+h.name, h.cwd, h.cfg.Header["worktree_root"], epic, panes, h.prompt)
 	d.Assign = fwd.assign
+	repo := h.owner + "/" + h.name
 	rv := newReviewer(h.st, panes, d.Send, fwd.assign, func(n int, err error) {
-		alert(h.st, h.broker, "hub", decisionsPane, fmt.Sprintf("review of #%d not sent: %v", n, err))
+		alert(h.st, h.broker, "hub", decisionsPane, fmt.Sprintf("review of #%d: %v", n, err))
+	}, func(ex spawner.ExecutorDispatch, done, verdict string) {
+		url, err := openPR(gitRun, ghRun, repo, ex, done, verdict)
+		if err != nil {
+			// the task stays approved; a later PASS for it reuses an open PR, never a second one
+			alert(h.st, h.broker, "hub", decisionsPane, fmt.Sprintf("PR for #%d not opened: %v", ex.Issue, err))
+			return
+		}
+		if err := h.st.SetPR(ex.Issue, url); err != nil {
+			fmt.Fprintln(os.Stderr, "hub: store PR:", err)
+		}
+		if err := (report.GhCommenter{Repo: repo}).Comment(ex.Issue, "PR opened by the hub after review: "+url); err != nil {
+			fmt.Fprintln(os.Stderr, "hub:", err)
+		}
+		fwd.note(fmt.Sprintf("[hub · #%d] PR opened: %s", ex.Issue, url))
+	}, func(n int, verdict string) {
+		fwd.note(fmt.Sprintf("[hub · #%d] REVISE %d times; latest %s. Decide the follow-up for what is left.", n, maxRevise, verdict))
 	})
 	h.mu.Lock()
 	h.run = &epicRun{act: actOnStop(d, showResult(h.st, h.broker)), rv: rv, fwd: fwd}

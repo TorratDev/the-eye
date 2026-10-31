@@ -36,8 +36,13 @@ func Submit(st Store, c Commenter, issue int, role, status, summary string) erro
 	if !slices.Contains([]string{"executor", "reviewer", "investigator", "orchestrator"}, role) {
 		return fmt.Errorf("unknown role %q", role)
 	}
-	if status != "done" && status != "blocked" {
-		return fmt.Errorf("status must be done or blocked, not %q", status)
+	// a reviewer reports its verdict (prompts/reviewer.md); every other role reports done or blocked
+	statuses := []string{"done", "blocked"}
+	if role == "reviewer" {
+		statuses = []string{"pass", "revise", "split", "escalate"}
+	}
+	if !slices.Contains(statuses, strings.ToLower(status)) {
+		return fmt.Errorf("status for %s must be one of %s, not %q", role, strings.Join(statuses, ", "), status)
 	}
 	summary = strings.TrimSpace(summary)
 	if summary == "" || strings.ContainsAny(summary, "\r\n") {
@@ -71,9 +76,9 @@ func (g GhCommenter) Comment(issue int, body string) error {
 // Tool is the report tool definition. The role comes from HUB_ROLE in the session's env.
 func Tool() mcp.Tool {
 	return mcp.NewTool("report",
-		mcp.WithDescription("Report this task's outcome: status done or blocked, and a one-line summary."),
+		mcp.WithDescription("Report this task's outcome and a one-line summary. Status is done or blocked; a reviewer gives its verdict: pass, revise, split or escalate."),
 		mcp.WithNumber("issue", mcp.Required(), mcp.Description("the sub-issue number")),
-		mcp.WithString("status", mcp.Required(), mcp.Description("done or blocked")),
+		mcp.WithString("status", mcp.Required(), mcp.Description("done or blocked; for a reviewer pass, revise, split or escalate")),
 		mcp.WithString("summary", mcp.Required(), mcp.Description("one line")),
 	)
 }

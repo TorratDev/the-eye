@@ -171,13 +171,6 @@ func (s *Store) Task(number int) (Task, error) {
 	return t, err
 }
 
-// SetPR records the PR the hub opened for a sub-issue.
-func (s *Store) SetPR(number int, url string) error {
-	_, err := s.db.Exec(`INSERT INTO prs (number, url) VALUES (?, ?)
-		ON CONFLICT(number) DO UPDATE SET url = excluded.url`, number, url)
-	return err
-}
-
 // PRs maps each sub-issue that has a PR to its URL.
 func (s *Store) PRs() (map[int]string, error) {
 	rows, err := s.db.Query(`SELECT number, url FROM prs`)
@@ -299,6 +292,22 @@ func (s *Store) Dispatch(number int) (string, error) {
 		return "", nil
 	}
 	return d, err
+}
+
+// SetPR keeps the URL of the PR the hub opened for a sub-issue.
+func (s *Store) SetPR(number int, url string) error {
+	_, err := s.db.Exec(`INSERT INTO prs (number, url) VALUES (?, ?) ON CONFLICT(number) DO UPDATE SET url = excluded.url`, number, url)
+	return err
+}
+
+// PR returns the URL of the PR the hub opened for a sub-issue, or "".
+func (s *Store) PR(number int) (string, error) {
+	var url string
+	err := s.db.QueryRow(`SELECT url FROM prs WHERE number = ?`, number).Scan(&url)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	return url, err
 }
 
 // PaneTask returns the sub-issue in state whose task is on pane, or 0.
