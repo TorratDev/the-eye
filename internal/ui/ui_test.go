@@ -82,3 +82,31 @@ func TestPermissionPromptReachesClient(t *testing.T) {
 		}
 	}
 }
+
+// A sub-issue with a PR the hub opened shows the PR's link on the Progress list.
+func TestProgressShowsPRLink(t *testing.T) {
+	st, err := hub.OpenStore(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if err := st.SetState(7, "in review"); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetState(8, "in review"); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetPR(7, "https://github.com/o/r/pull/70"); err != nil {
+		t.Fatal(err)
+	}
+	frag, err := SessionsFragment(st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(frag, `<a href="https://github.com/o/r/pull/70">PR</a>`) {
+		t.Errorf("PR link missing from progress:\n%s", frag)
+	}
+	if strings.Contains(frag, "#8 (") {
+		t.Errorf("sub-issue without a PR shows a link")
+	}
+}

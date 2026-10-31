@@ -3,6 +3,7 @@ package herdr
 import (
 	"errors"
 	"os/exec"
+	"strings"
 	"testing"
 )
 
@@ -19,6 +20,9 @@ func TestPinnedVersion(t *testing.T) {
 		t.Fatalf("herdr %s installed, wrapper pinned to %s", v, PinnedVersion)
 	}
 	if _, err := WorkspaceList(); err != nil {
+		if strings.Contains(err.Error(), "server_not_running") {
+			t.Skip("herdr server not running")
+		}
 		t.Fatal(err)
 	}
 	if _, err := AgentRead("", 1); err == nil {

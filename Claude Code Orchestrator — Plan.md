@@ -8,7 +8,7 @@ A local Go hub runs Claude Code sessions against a repo's GitHub epics and sub-i
 
 - **Source of truth**: GitHub. Epics are plans, sub-issues are tasks, and labels or Project fields hold status. "Blocked by" relationships order dispatch.
 - **Repo-agnostic**: role prompts are generic. Repo specifics come from a per-repo config injected by the hub.
-- **Out of scope for the first iteration**: running the hub as a hosted service; a full UI for controlling sessions (the first UI only watches).
+- **Out of scope**: running the hub as a hosted service, and remote hosting or login for the UI. Phase 9 adds session control on localhost (read transcripts, send messages, answer prompts and escalations, start an epic) on top of the watcher; merges stay on GitHub.
 
 ## Architecture
 
@@ -118,6 +118,8 @@ Each phase ends with something runnable; cloud workers come last.
 5. **Web UI**: SSE plus htmx view of sessions, states, errors and issue progress.
 6. **Channel relay and orchestrator session**: push hub events into the orchestrator.
 7. **Cloud workers**: report through GitHub, ingested by webhook or polling.
+8. **One-command epic run**: `hub plan <epic>` carries an epic from planning to merged PRs, live against herdr, Claude Code and GitHub.
+9. **Minimal session app**: on the watcher page, start an epic, open a session, read its transcript, and send it a message. Localhost only.
 
 ## Risks and open decisions
 

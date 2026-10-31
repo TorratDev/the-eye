@@ -53,6 +53,17 @@ Call the `report` tool with status `done` (or `blocked`) and the findings table 
 
 If you are blocked, end with one line instead: `BLOCKED: <what is missing>`.
 
+### Cloud workers
+
+A cloud worker has no hub on its machine and cannot call `report`. Post one GitHub comment on the sub-issue instead, in this shape. The hub reads only comments that start with the marker:
+
+```
+<!-- hub:worker-report -->
+role: investigator
+<the findings table, as many lines as needed>
+<the table or BLOCKED line above, as the last line>
+```
+
 ## 8. Stop and cleanup
 
 Wait for the next dispatch. When the hub tells you to stop, release every resource you started (the repo rules say how), delete your scratch output, and report that both are done.

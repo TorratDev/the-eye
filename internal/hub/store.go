@@ -41,6 +41,14 @@ CREATE TABLE IF NOT EXISTS dispatches (
 	number   INTEGER PRIMARY KEY,
 	executor TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS pane_names (
+	pane TEXT PRIMARY KEY,
+	name TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS prs (
+	number INTEGER PRIMARY KEY,
+	url    TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS reports (
 	id         INTEGER PRIMARY KEY AUTOINCREMENT,
 	created_at TEXT NOT NULL,
@@ -161,6 +169,32 @@ func (s *Store) Task(number int) (Task, error) {
 		return Task{}, nil
 	}
 	return t, err
+}
+
+// SetPR records the PR the hub opened for a sub-issue.
+func (s *Store) SetPR(number int, url string) error {
+	_, err := s.db.Exec(`INSERT INTO prs (number, url) VALUES (?, ?)
+		ON CONFLICT(number) DO UPDATE SET url = excluded.url`, number, url)
+	return err
+}
+
+// PRs maps each sub-issue that has a PR to its URL.
+func (s *Store) PRs() (map[int]string, error) {
+	rows, err := s.db.Query(`SELECT number, url FROM prs`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[int]string{}
+	for rows.Next() {
+		var n int
+		var url string
+		if err := rows.Scan(&n, &url); err != nil {
+			return nil, err
+		}
+		out[n] = url
+	}
+	return out, rows.Err()
 }
 
 // Event is one hook event as the hub stored it.
@@ -291,6 +325,26 @@ func (s *Store) FinishPaneTask(pane, state string) error {
 }
 
 // LastSession returns the session_id of the newest hook event from pane, or "" if none has one.
+// SetPaneName records that herdr pane (an ID) is the named pane, e.g. "orchestrator". Pane IDs
+// change when herdr restarts, so a name can map to several IDs over time.
+func (s *Store) SetPaneName(pane, name string) error {
+	_, err := s.db.Exec(`INSERT INTO pane_names (pane, name) VALUES (?, ?)
+		ON CONFLICT(pane) DO UPDATE SET name = excluded.name`, pane, name)
+	return err
+}
+
+// LastSessionByName is the newest session id from the hook events of any pane ever recorded under
+// name, so a session survives a herdr restart that changed its pane ID. "" if there is none.
+func (s *Store) LastSessionByName(name string) (string, error) {
+	var id string
+	err := s.db.QueryRow(`SELECT e.session FROM events e JOIN pane_names n ON n.pane = e.pane
+		WHERE n.name = ? AND e.session IS NOT NULL AND e.session != '' ORDER BY e.id DESC LIMIT 1`, name).Scan(&id)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	return id, err
+}
+
 func (s *Store) LastSession(pane string) (string, error) {
 	var id string
 	err := s.db.QueryRow(`SELECT session FROM events WHERE pane = ? AND session IS NOT NULL AND session != '' ORDER BY id DESC LIMIT 1`, pane).Scan(&id)
