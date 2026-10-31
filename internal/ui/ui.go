@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"html/template"
 	"io"
+	"log"
 	"net/http"
 	"sort"
 	"strconv"
@@ -182,6 +183,26 @@ var page = template.Must(template.New("page").Parse(`<!doctype html>
 <div id="dashboard" hx-ext="sse" sse-connect="/events" sse-swap="state">{{.}}</div>
 </body></html>`))
 
+// finishFromFinalLine is the fallback when an executor ends its turn without the report tool: the
+// DONE or BLOCKED final line of its Stop event ends the task executing in its pane.
+func finishFromFinalLine(st *hub.Store, e hub.Event) {
+	if e.Hook != "Stop" || e.Role != "executor" {
+		return
+	}
+	var p struct {
+		Reply string `json:"last_assistant_message"`
+	}
+	json.Unmarshal([]byte(e.Payload), &p)
+	lines := strings.Split(strings.TrimSpace(p.Reply), "\n")
+	f, err := session.ParseFinal("executor", lines[len(lines)-1])
+	if err != nil {
+		return
+	}
+	if err := st.FinishPaneTask(e.Pane, session.TaskState(f.Kind)); err != nil {
+		log.Printf("hub: finish task in %s: %v", e.Pane, err)
+	}
+}
+
 // Handler serves the page, the hook endpoint, the live stream and the report endpoint. A stored hook
 // event is published to every connected page as a new sessions table, then passed to onEvent if set.
 // c posts report comments; with nil, POST /report refuses. act holds what the page may do to a
@@ -224,6 +245,7 @@ func Handler(st *hub.Store, b *live.Broker, c report.Commenter, onEvent func(hub
 		w.WriteHeader(http.StatusNoContent)
 	})
 	mux.Handle("POST /hooks", ingest.Handler(st, func(e hub.Event) {
+		finishFromFinalLine(st, e)
 		if frag, err := SessionsFragment(st); err == nil {
 			b.Publish("state", frag)
 		}

@@ -13,11 +13,13 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 
 	"github.com/TorratDev/the-eye/internal/hub"
+	"github.com/TorratDev/the-eye/internal/session"
 )
 
 // Store is the part of the hub store the tool needs.
 type Store interface {
 	RecordReport(issue int, role, status, summary string) error
+	FinishTask(issue int, state string) error
 }
 
 // Commenter posts a comment on an issue.
@@ -43,6 +45,12 @@ func Submit(st Store, c Commenter, issue int, role, status, summary string) erro
 	}
 	if err := st.RecordReport(issue, role, status, summary); err != nil {
 		return err
+	}
+	// an executor's report ends its task, which frees its pane for the next batch
+	if role == "executor" {
+		if err := st.FinishTask(issue, session.TaskState(strings.ToUpper(status))); err != nil {
+			return err
+		}
 	}
 	return c.Comment(issue, fmt.Sprintf("**%s** report from `%s`: %s", status, role, summary))
 }
