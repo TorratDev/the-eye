@@ -17,9 +17,11 @@ type reviewer struct {
 	send   func(pane, text string) error // starts or resumes the reviewer session, then sends
 	assign func(issue int, pane string)
 	failed func(issue int, err error)
+	passed func(ex spawner.ExecutorDispatch, done, verdict string) // after a PASS, on this goroutine
 
-	events  chan hub.Event
-	pending []review
+	events    chan hub.Event
+	pending   []review
+	reviewing map[string]review // reviewer pane ID -> the review it was sent
 }
 
 type review struct {
@@ -27,8 +29,9 @@ type review struct {
 	done  string // the executor's DONE line
 }
 
-func newReviewer(st *hub.Store, panes map[string]string, send func(pane, text string) error, assign func(int, string), failed func(int, error)) *reviewer {
-	r := &reviewer{st: st, send: send, assign: assign, failed: failed, events: make(chan hub.Event, 64)}
+func newReviewer(st *hub.Store, panes map[string]string, send func(pane, text string) error, assign func(int, string), failed func(int, error),
+	passed func(ex spawner.ExecutorDispatch, done, verdict string)) *reviewer {
+	r := &reviewer{st: st, send: send, assign: assign, failed: failed, passed: passed, events: make(chan hub.Event, 64), reviewing: map[string]review{}}
 	for _, role := range spawner.Roles {
 		for _, name := range role.Panes {
 			if strings.HasPrefix(name, "reviewer-") && panes[name] != "" {
@@ -66,6 +69,9 @@ func (r *reviewer) handle(e hub.Event) {
 		}
 		r.pending = append(r.pending, review{n, done})
 	}
+	if e.Role == "reviewer" {
+		r.verdict(e)
+	}
 	var waiting []review
 	for _, rv := range r.pending {
 		switch err := r.start(rv); {
@@ -96,12 +102,8 @@ func (r *reviewer) start(rv review) error {
 	if pane == "" {
 		return errNoReviewer
 	}
-	raw, err := r.st.Dispatch(rv.issue)
-	if err != nil || raw == "" {
-		return fmt.Errorf("no stored task for #%d (%v)", rv.issue, err)
-	}
-	var ex spawner.ExecutorDispatch
-	if err := json.Unmarshal([]byte(raw), &ex); err != nil {
+	ex, err := r.task(rv.issue)
+	if err != nil {
 		return err
 	}
 	msg, err := spawner.ReviewDispatch{Issue: ex.Issue, Objective: ex.Objective, Files: ex.Files, Verify: ex.Verify,
@@ -113,7 +115,40 @@ func (r *reviewer) start(rv review) error {
 		return err
 	}
 	r.assign(rv.issue, pane)
+	r.reviewing[pane] = rv
 	return r.st.SetTask(rv.issue, hub.Task{State: "reviewing", Worktree: ex.Worktree, Pane: pane})
+}
+
+// verdict ends the review a reviewer pane was sent; a PASS goes on to passed.
+func (r *reviewer) verdict(e hub.Event) {
+	rv, ok := r.reviewing[e.Pane]
+	if !ok {
+		return
+	}
+	line := workerResult("reviewer", stopReply(e))
+	if line == "" {
+		return // no verdict yet: the reviewer is still on it
+	}
+	delete(r.reviewing, e.Pane)
+	if !strings.HasPrefix(line, "PASS: ") || r.passed == nil {
+		return
+	}
+	ex, err := r.task(rv.issue)
+	if err != nil {
+		r.failed(rv.issue, err)
+		return
+	}
+	r.passed(ex, rv.done, line)
+}
+
+// task reads the executor dispatch kept for a sub-issue.
+func (r *reviewer) task(n int) (spawner.ExecutorDispatch, error) {
+	var ex spawner.ExecutorDispatch
+	raw, err := r.st.Dispatch(n)
+	if err != nil || raw == "" {
+		return ex, fmt.Errorf("no stored task for #%d (%v)", n, err)
+	}
+	return ex, json.Unmarshal([]byte(raw), &ex)
 }
 
 // stopReply is the reply text a Stop event carries.
