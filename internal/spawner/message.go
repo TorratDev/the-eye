@@ -27,6 +27,7 @@ type ExecutorDispatch struct {
 	Files     []string
 	Verify    string
 	Evidence  string
+	Revise    string `json:",omitempty"` // the reviewer's REVISE, when the task comes back
 }
 
 // ReviewDispatch is the message to one reviewer (prompts/reviewer.md, part 2).
@@ -76,6 +77,7 @@ func (d ExecutorDispatch) Message() (string, error) {
 		"files: "+strings.Join(d.Files, ", "),
 		"verify: "+d.Verify,
 		"evidence: "+d.Evidence,
+		optional("revise", d.Revise),
 	), nil
 }
 

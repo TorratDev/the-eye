@@ -52,7 +52,7 @@ func TestDoneDispatchesReview(t *testing.T) {
 		func(int, string) {}, func(n int, err error) { t.Errorf("#%d: %v", n, err) },
 		func(ex spawner.ExecutorDispatch, done, verdict string) {
 			passed <- fmt.Sprintf("#%d %s | %s", ex.Issue, done, verdict)
-		})
+		}, nil)
 	srv := httptest.NewServer(ui.Handler(st, live.NewBroker(), nil, rv.onStop, ui.Actions{}))
 	defer srv.Close()
 	next := func() sent {
@@ -100,6 +100,73 @@ func TestDoneDispatchesReview(t *testing.T) {
 	select {
 	case p := <-passed:
 		t.Fatalf("a REVISE opened a PR: %q", p)
+	case <-time.After(300 * time.Millisecond):
+	}
+}
+
+// A REVISE goes back to a free executor with the same worktree and branch and the reviewer's change;
+// the third goes to the orchestrator instead.
+func TestReviseLoop(t *testing.T) {
+	st, err := hub.OpenStore(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	panes := map[string]string{"executor-1": "e1", "executor-2": "e2", "reviewer-1": "r1"}
+	raw, _ := json.Marshal(spawner.ExecutorDispatch{Issue: 22, Worktree: "/wt/22", Branch: "22-flag", Objective: "o", Files: []string{"a.go"}, Verify: "v", Evidence: "e"})
+	st.SetDispatch(22, string(raw))
+	st.SetTask(22, hub.Task{State: "executing", Worktree: "/wt/22", Pane: "e2"})
+	type sent struct{ pane, text string }
+	sends := make(chan sent, 8)
+	out := make(chan string, 2)
+	rv := newReviewer(st, panes, func(pane, text string) error { sends <- sent{pane, text}; return nil },
+		func(int, string) {}, func(n int, err error) { t.Errorf("#%d: %v", n, err) }, nil,
+		func(n int, verdict string) { out <- fmt.Sprintf("#%d %s", n, verdict) })
+	srv := httptest.NewServer(ui.Handler(st, live.NewBroker(), nil, rv.onStop, ui.Actions{}))
+	defer srv.Close()
+	next := func() sent {
+		t.Helper()
+		select {
+		case s := <-sends:
+			return s
+		case <-time.After(3 * time.Second):
+			t.Fatal("nothing sent")
+		}
+		return sent{}
+	}
+
+	executor := "e2"
+	for round := 1; round <= maxRevise; round++ {
+		postStopFrom(t, srv.URL, "executor", executor, "DONE: try "+fmt.Sprint(round)+"; verification: ok; branch: 22-flag")
+		if s := next(); s.pane != "r1" {
+			t.Fatalf("round %d: review went to %s", round, s.pane)
+		}
+		postStopFrom(t, srv.URL, "reviewer", "r1", "REVISE: rename the flag")
+		if round == maxRevise {
+			break
+		}
+		s := next()
+		for _, want := range []string{"role: executor", "issue: #22", "worktree: /wt/22", "branch: 22-flag", "revise: rename the flag"} {
+			if !strings.Contains(s.text, want) {
+				t.Fatalf("round %d: send-back lacks %q:\n%s", round, want, s.text)
+			}
+		}
+		if task, _ := st.Task(22); task.State != "executing" || task.Pane != s.pane {
+			t.Fatalf("round %d: task %+v after send-back to %s", round, task, s.pane)
+		}
+		executor = s.pane
+	}
+	select {
+	case o := <-out:
+		if o != "#22 REVISE: rename the flag" {
+			t.Fatalf("to the orchestrator: %q", o)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("the third REVISE did not go to the orchestrator")
+	}
+	select {
+	case s := <-sends:
+		t.Fatalf("the third REVISE was sent back too: %+v", s)
 	case <-time.After(300 * time.Millisecond):
 	}
 }
