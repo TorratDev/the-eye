@@ -164,9 +164,9 @@ var page = template.Must(template.New("page").Parse(`<!doctype html>
 </body></html>`))
 
 // Handler serves the page, the hook endpoint, the live stream and the report endpoint. A stored hook
-// event is published to every connected page as a new sessions table. c posts report comments; with
-// nil, POST /report refuses.
-func Handler(st *hub.Store, b *live.Broker, c report.Commenter) http.Handler {
+// event is published to every connected page as a new sessions table, then passed to onEvent if set.
+// c posts report comments; with nil, POST /report refuses.
+func Handler(st *hub.Store, b *live.Broker, c report.Commenter, onEvent func(hub.Event)) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		frag, err := SessionsFragment(st)
@@ -202,9 +202,12 @@ func Handler(st *hub.Store, b *live.Broker, c report.Commenter) http.Handler {
 		}
 		w.WriteHeader(http.StatusNoContent)
 	})
-	mux.Handle("POST /hooks", ingest.Handler(st, func(hub.Event) {
+	mux.Handle("POST /hooks", ingest.Handler(st, func(e hub.Event) {
 		if frag, err := SessionsFragment(st); err == nil {
 			b.Publish("state", frag)
+		}
+		if onEvent != nil {
+			onEvent(e)
 		}
 	}))
 	mux.Handle("GET /events", b.Handler(func() string {

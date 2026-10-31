@@ -26,7 +26,7 @@ func TestReportThroughSessionMCP(t *testing.T) {
 	}
 	defer st.Close()
 	c := &fakeComments{}
-	srv := httptest.NewServer(Handler(st, live.NewBroker(), c))
+	srv := httptest.NewServer(Handler(st, live.NewBroker(), c, nil))
 	defer srv.Close()
 
 	handler := report.Remote(srv.URL, "executor")
@@ -51,7 +51,7 @@ func TestReportWithoutCommenterRefused(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer st.Close()
-	srv := httptest.NewServer(Handler(st, live.NewBroker(), nil))
+	srv := httptest.NewServer(Handler(st, live.NewBroker(), nil, nil))
 	defer srv.Close()
 
 	req := mcp.CallToolRequest{}

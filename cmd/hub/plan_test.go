@@ -22,7 +22,7 @@ func fakeSteps(calls *[]string, fail string) planSteps {
 		layout: func() (map[string]string, error) {
 			return map[string]string{"orchestrator": "p1"}, step("layout")
 		},
-		serve: func() (func() error, error) {
+		serve: func(map[string]string) (func() error, error) {
 			return func() error { return step("wait") }, step("serve")
 		},
 		running: func(pane string) (bool, error) { return false, step("running " + pane) },

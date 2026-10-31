@@ -106,6 +106,7 @@ type serveOpts struct {
 	addr, repo string
 	epic       int
 	poll       time.Duration
+	onEvent    func(st *hub.Store, broker *live.Broker) func(hub.Event) // optional; built once the store is open
 }
 
 // serveFlags registers the flags serve and plan share.
@@ -153,7 +154,11 @@ func startServe(o serveOpts) (wait func() error, err error) {
 	}
 	fmt.Printf("hub: serving on http://%s (state in %s)\n", o.addr, stateFile)
 	errc := make(chan error, 1)
-	go func() { errc <- http.Serve(ln, ui.Handler(st, broker, commenter)) }()
+	var onEvent func(hub.Event)
+	if o.onEvent != nil {
+		onEvent = o.onEvent(st, broker)
+	}
+	go func() { errc <- http.Serve(ln, ui.Handler(st, broker, commenter, onEvent)) }()
 	return func() error {
 		defer st.Close()
 		return <-errc
@@ -205,10 +210,15 @@ func pollCloud(st *hub.Store, broker *live.Broker, repo, owner, name string, epi
 
 // recordAlert stores a cloud finding as a prompt-style event, so the errors panel shows it, and publishes the page.
 func recordAlert(st *hub.Store, broker *live.Broker, issue int, what, text string) {
-	payload, _ := json.Marshal(map[string]string{"message": fmt.Sprintf("#%d %s: %s", issue, what, text)})
-	err := st.RecordEvent(hub.Event{ReceivedAt: time.Now(), Hook: "Notification", Role: "cloud", Pane: fmt.Sprintf("cloud-%d", issue), Payload: string(payload)})
+	alert(st, broker, "cloud", fmt.Sprintf("cloud-%d", issue), fmt.Sprintf("#%d %s: %s", issue, what, text))
+}
+
+// alert stores message as a prompt-style event for role and pane, and publishes the page.
+func alert(st *hub.Store, broker *live.Broker, role, pane, message string) {
+	payload, _ := json.Marshal(map[string]string{"message": message})
+	err := st.RecordEvent(hub.Event{ReceivedAt: time.Now(), Hook: "Notification", Role: role, Pane: pane, Payload: string(payload)})
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "hub: record cloud finding:", err)
+		fmt.Fprintln(os.Stderr, "hub: record alert:", err)
 		return
 	}
 	if frag, err := ui.SessionsFragment(st); err == nil {
