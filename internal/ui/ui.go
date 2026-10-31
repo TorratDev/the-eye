@@ -183,10 +183,11 @@ var page = template.Must(template.New("page").Parse(`<!doctype html>
 <div id="dashboard" hx-ext="sse" sse-connect="/events" sse-swap="state">{{.}}</div>
 </body></html>`))
 
-// finishFromFinalLine is the fallback when an executor ends its turn without the report tool: the
-// DONE or BLOCKED final line of its Stop event ends the task executing in its pane.
+// finishFromFinalLine ends the task in an executor's or reviewer's pane from the final line of its
+// Stop event: DONE or BLOCKED for an executor (the fallback when it skipped the report tool), the
+// verdict for a reviewer. That frees the pane.
 func finishFromFinalLine(st *hub.Store, e hub.Event) {
-	if e.Hook != "Stop" || e.Role != "executor" {
+	if e.Hook != "Stop" || (e.Role != "executor" && e.Role != "reviewer") {
 		return
 	}
 	var p struct {
@@ -194,7 +195,7 @@ func finishFromFinalLine(st *hub.Store, e hub.Event) {
 	}
 	json.Unmarshal([]byte(e.Payload), &p)
 	lines := strings.Split(strings.TrimSpace(p.Reply), "\n")
-	f, err := session.ParseFinal("executor", lines[len(lines)-1])
+	f, err := session.ParseFinal(e.Role, lines[len(lines)-1])
 	if err != nil {
 		return
 	}

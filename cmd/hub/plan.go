@@ -92,8 +92,12 @@ func plan(args []string) error {
 				d := liveDeps(st, broker, owner+"/"+name, *cwd, cfg.Header["worktree_root"], epic, panes, rendered)
 				d.Assign = fwd.assign
 				act := actOnStop(d, showResult(st, broker))
+				rv := newReviewer(st, panes, d.Send, fwd.assign, func(n int, err error) {
+					alert(st, broker, "hub", decisionsPane, fmt.Sprintf("review of #%d not sent: %v", n, err))
+				})
 				return func(e hub.Event) {
 					act(e)
+					rv.onStop(e)
 					if !fwd.onStop(e) {
 						alert(st, broker, e.Role, e.Pane, "ended its turn without a result line")
 					}
