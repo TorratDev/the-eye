@@ -55,8 +55,19 @@ func plan(args []string) error {
 	var cfg config.Config
 	var rendered map[string]string
 	var store *hub.Store // set once serve has opened it
+	var fwd *forwarder   // set once serve has opened the store
+	announced := map[int]bool{}
+	var handoff string
 	return planSteps{
-		sync:     func() error { return sync(owner, name, epic) },
+		sync: func() error {
+			verdicts, err := sync(owner, name, epic)
+			// the hand-off names the ready sub-issues; the watcher announces only later ones
+			handoff = fmt.Sprintf("Epic #%d.", epic)
+			if ready := newlyReady(verdicts, announced); len(ready) > 0 {
+				handoff += " Ready to plan: " + refList(ready) + "."
+			}
+			return err
+		},
 		baseline: spawner.Baseline,
 		prompt: func() (string, error) {
 			if cfg, err = config.Load(*cfgPath); err != nil {
@@ -71,16 +82,55 @@ func plan(args []string) error {
 		serve: func(panes map[string]string) (func() error, error) {
 			o.onEvent = func(st *hub.Store, broker *live.Broker) func(hub.Event) {
 				store = st
+				orchestrator := panes["orchestrator"]
+				fwd = newForwarder(panes,
+					func(text string) error { return spawner.SendWhenIdle(orchestrator, text, orchestratorWait) },
+					func(text string, err error) {
+						alert(st, broker, "hub", decisionsPane, fmt.Sprintf("not forwarded to the orchestrator (%v): %s", err, text))
+					})
+				go watchReady(st, owner, name, epic, o.poll, announced, fwd)
 				d := liveDeps(st, broker, owner+"/"+name, *cwd, cfg.Header["worktree_root"], epic, panes, rendered)
-				return actOnStop(d, showResult(st, broker))
+				d.Assign = fwd.assign
+				act := actOnStop(d, showResult(st, broker))
+				return func(e hub.Event) {
+					act(e)
+					if !fwd.onStop(e) {
+						alert(st, broker, e.Role, e.Pane, "ended its turn without a result line")
+					}
+				}
 			}
 			return startServe(*o)
 		},
 		running: agentRunning,
 		session: func(pane string) (string, error) { return store.LastSession(pane) },
 		start:   spawner.StartOrchestrator,
-		send:    func(pane, text string) error { return spawner.SendWhenIdle(pane, text, 2*time.Minute) },
+		send:    func(pane, text string) error { return spawner.SendWhenIdle(pane, handoff, 2*time.Minute) },
 	}.run(epic)
+}
+
+// watchReady announces sub-issues that become ready after the hand-off (a blocker merged).
+// announced is only touched here once serve runs, after sync filled it.
+func watchReady(st *hub.Store, owner, name string, epic int, every time.Duration, announced map[int]bool, fwd *forwarder) {
+	token, err := hub.GhToken()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "hub: ready watch disabled:", err)
+		return
+	}
+	client := &hub.Client{URL: graphQL, Token: token}
+	for range time.Tick(every) {
+		issues, err := client.Epic(owner, name, epic)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "hub: ready watch:", err)
+			continue
+		}
+		claims, err := st.Claims()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "hub: ready watch:", err)
+			continue
+		}
+		verdicts, _ := hub.Plan(issues, claims)
+		fwd.ready(newlyReady(verdicts, announced))
+	}
 }
 
 // planSteps are plan's side effects, injected so the order can be tested.
