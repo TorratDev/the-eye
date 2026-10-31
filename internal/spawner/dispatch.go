@@ -18,7 +18,8 @@ func Batch(ready []int) (start, queue []int) {
 	return ready[:MaxBatch], ready[MaxBatch:]
 }
 
-// SendWhenIdle types text into pane once herdr reports it idle. If the pane stays busy past
+// SendWhenIdle types text into pane once herdr reports it ready for input: idle, or done (a finished
+// turn nobody has looked at yet; herdr keeps that state until the pane is seen). If the pane stays busy past
 // timeout it returns an error and sends nothing, so the caller can retry later.
 func SendWhenIdle(pane, text string, timeout time.Duration) error {
 	return sendWhenIdle(
@@ -36,7 +37,7 @@ func sendWhenIdle(get func() (herdr.Pane, error), send func() error, timeout, po
 		if err != nil {
 			return err
 		}
-		if p.AgentStatus == "idle" {
+		if p.AgentStatus == "idle" || p.AgentStatus == "done" {
 			return send()
 		}
 		if time.Now().After(deadline) {

@@ -61,3 +61,15 @@ func TestAnswerPrompt(t *testing.T) {
 		}
 	}
 }
+
+// A finished turn herdr still shows as done is ready for input, as idle is; blocked and unknown are not.
+func TestSendWhenDone(t *testing.T) {
+	for status, want := range map[string]bool{"done": true, "idle": true, "blocked": false, "unknown": false} {
+		sent := false
+		get := func() (herdr.Pane, error) { return herdr.Pane{ID: "p1", AgentStatus: status}, nil }
+		err := sendWhenIdle(get, func() error { sent = true; return nil }, 5*time.Millisecond, time.Millisecond)
+		if sent != want || (err == nil) != want {
+			t.Errorf("%s: sent %v, err %v", status, sent, err)
+		}
+	}
+}
