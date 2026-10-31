@@ -12,6 +12,7 @@ import (
 	"github.com/TorratDev/the-eye/internal/decision"
 	"github.com/TorratDev/the-eye/internal/hub"
 	"github.com/TorratDev/the-eye/internal/live"
+	"github.com/TorratDev/the-eye/internal/spawner"
 	"github.com/TorratDev/the-eye/internal/ui"
 )
 
@@ -48,7 +49,7 @@ func TestStopDispatchesTask(t *testing.T) {
 		Worktree:         func(n int, slug string) (string, error) { return "/wt/22-" + slug, nil },
 		FreeExecutorPane: func() (string, error) { return "p-exec", nil },
 		Send:             func(pane, text string) error { sends <- sent{pane, text}; return nil },
-		SetTask:          func(int, string, string) error { return nil },
+		SetTask:          func(*spawner.ExecutorDispatch, string) error { return nil },
 	}
 	srv := httptest.NewServer(ui.Handler(st, live.NewBroker(), nil, actOnStop(d, func(r decision.Result, err error) {
 		if err != nil {

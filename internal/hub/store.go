@@ -37,6 +37,10 @@ CREATE TABLE IF NOT EXISTS cloud_seen (
 	number  INTEGER PRIMARY KEY,
 	seen_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS dispatches (
+	number   INTEGER PRIMARY KEY,
+	executor TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS reports (
 	id         INTEGER PRIMARY KEY AUTOINCREMENT,
 	created_at TEXT NOT NULL,
@@ -246,6 +250,33 @@ func (s *Store) SubIssueForPane(pane string) (int, error) {
 	return n, err
 }
 
+// SetDispatch keeps the executor dispatch a sub-issue was sent (JSON), so its review can be built later.
+func (s *Store) SetDispatch(number int, executor string) error {
+	_, err := s.db.Exec(`INSERT INTO dispatches (number, executor) VALUES (?, ?)
+		ON CONFLICT(number) DO UPDATE SET executor = excluded.executor`, number, executor)
+	return err
+}
+
+// Dispatch returns the executor dispatch kept for a sub-issue, or "".
+func (s *Store) Dispatch(number int) (string, error) {
+	var d string
+	err := s.db.QueryRow(`SELECT executor FROM dispatches WHERE number = ?`, number).Scan(&d)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	return d, err
+}
+
+// PaneTask returns the sub-issue in state whose task is on pane, or 0.
+func (s *Store) PaneTask(pane, state string) (int, error) {
+	var n int
+	err := s.db.QueryRow(`SELECT number FROM tasks WHERE pane = ? AND state = ? ORDER BY number LIMIT 1`, pane, state).Scan(&n)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	return n, err
+}
+
 // FinishTask moves a sub-issue that is executing to state, which frees its executor pane.
 // A task in any other state is left alone, so a late or repeated report changes nothing.
 func (s *Store) FinishTask(number int, state string) error {
@@ -253,9 +284,9 @@ func (s *Store) FinishTask(number int, state string) error {
 	return err
 }
 
-// FinishPaneTask is FinishTask for whichever sub-issue is executing in pane.
+// FinishPaneTask moves whichever sub-issue is executing or reviewing in pane to state, which frees the pane.
 func (s *Store) FinishPaneTask(pane, state string) error {
-	_, err := s.db.Exec(`UPDATE tasks SET state = ? WHERE pane = ? AND state = 'executing'`, state, pane)
+	_, err := s.db.Exec(`UPDATE tasks SET state = ? WHERE pane = ? AND state IN ('executing', 'reviewing')`, state, pane)
 	return err
 }
 
@@ -269,10 +300,10 @@ func (s *Store) LastSession(pane string) (string, error) {
 	return id, err
 }
 
-// PaneBusy reports whether a sub-issue is executing in pane.
+// PaneBusy reports whether a sub-issue is executing or being reviewed in pane.
 func (s *Store) PaneBusy(pane string) (bool, error) {
 	var n int
-	err := s.db.QueryRow(`SELECT COUNT(*) FROM tasks WHERE pane = ? AND state = 'executing'`, pane).Scan(&n)
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM tasks WHERE pane = ? AND state IN ('executing', 'reviewing')`, pane).Scan(&n)
 	return n > 0, err
 }
 
