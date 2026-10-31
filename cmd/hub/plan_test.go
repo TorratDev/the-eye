@@ -25,8 +25,9 @@ func fakeSteps(calls *[]string, fail string) planSteps {
 		serve: func() (func() error, error) {
 			return func() error { return step("wait") }, step("serve")
 		},
-		start: func(pane, prompt string) error { return step("start " + pane + " " + prompt) },
-		send:  func(pane, text string) error { return step("send " + pane + " " + text) },
+		running: func(pane string) (bool, error) { return false, step("running " + pane) },
+		start:   func(pane, prompt string) error { return step("start " + pane + " " + prompt) },
+		send:    func(pane, text string) error { return step("send " + pane + " " + text) },
 	}
 }
 
@@ -35,7 +36,7 @@ func TestPlanOrder(t *testing.T) {
 	if err := fakeSteps(&calls, "").run(95); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"sync", "baseline", "prompt", "layout", "serve", "start p1 PROMPT", "send p1 Epic #95.", "wait"}
+	want := []string{"sync", "baseline", "prompt", "layout", "serve", "running p1", "start p1 PROMPT", "send p1 Epic #95.", "wait"}
 	if !slices.Equal(calls, want) {
 		t.Fatalf("calls = %q, want %q", calls, want)
 	}
@@ -57,5 +58,17 @@ func TestPlanNeedsOrchestratorPane(t *testing.T) {
 	s.layout = func() (map[string]string, error) { return map[string]string{}, nil }
 	if err := s.run(95); err == nil {
 		t.Fatal("run succeeded without an orchestrator pane")
+	}
+}
+
+func TestPlanSkipsLaunchWhenOrchestratorRuns(t *testing.T) {
+	var calls []string
+	s := fakeSteps(&calls, "")
+	s.running = func(string) (bool, error) { return true, nil }
+	if err := s.run(95); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"sync", "baseline", "prompt", "layout", "serve", "wait"}; !slices.Equal(calls, want) {
+		t.Fatalf("calls = %q, want %q", calls, want)
 	}
 }
