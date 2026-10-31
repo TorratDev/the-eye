@@ -1,5 +1,5 @@
-// Package ui serves the watcher page: one row per session, updated live from /events.
-// It has no controls; every action stays with the orchestrator and the hub.
+// Package ui serves the watcher page (one row per session) and a page per session with its
+// transcript, both updated live from /events. It has no controls yet.
 package ui
 
 import (
@@ -104,7 +104,7 @@ var dashboard = template.Must(template.New("dashboard").Parse(`<h2>Errors and pr
 <h2>Sessions</h2>
 <table>
 <thead><tr><th>Role</th><th>Pane</th><th>State</th><th>Sub-issue</th><th>Last event</th></tr></thead>
-<tbody>{{range .Rows}}<tr><td>{{.Role}}</td><td>{{.Pane}}</td><td>{{.State}}</td><td>{{if .Issue}}#{{.Issue}}{{else}}-{{end}}</td><td>{{.At.Format "15:04:05"}}</td></tr>{{else}}<tr><td colspan="5">no sessions yet</td></tr>{{end}}</tbody>
+<tbody>{{range .Rows}}<tr><td>{{.Role}}</td><td><a href="/sessions/{{.Pane}}">{{.Pane}}</a></td><td>{{.State}}</td><td>{{if .Issue}}#{{.Issue}}{{else}}-{{end}}</td><td>{{.At.Format "15:04:05"}}</td></tr>{{else}}<tr><td colspan="5">no sessions yet</td></tr>{{end}}</tbody>
 </table>
 <h2>Progress</h2>
 <ul>{{range .Progress}}<li>{{.State}}: {{.Issues}}</li>{{else}}<li>no sub-issues tracked</li>{{end}}</ul>`))
@@ -168,6 +168,7 @@ var page = template.Must(template.New("page").Parse(`<!doctype html>
 // c posts report comments; with nil, POST /report refuses.
 func Handler(st *hub.Store, b *live.Broker, c report.Commenter, onEvent func(hub.Event)) http.Handler {
 	mux := http.NewServeMux()
+	sessionHandlers(mux, st)
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		frag, err := SessionsFragment(st)
 		if err != nil {
