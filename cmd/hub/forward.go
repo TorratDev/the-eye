@@ -89,16 +89,16 @@ func (f *forwarder) note(text string) {
 }
 
 // workerResult is what the orchestrator needs from a worker's reply: an executor's or reviewer's
-// final line, or an investigator's findings rows (or its BLOCKED line). "" when there is none.
+// result line (the last one, even with notes after it), or an investigator's findings rows (or its
+// BLOCKED line). "" when there is none.
 func workerResult(role, reply string) string {
-	lines := strings.Split(strings.TrimSpace(reply), "\n")
-	last := strings.TrimSpace(lines[len(lines)-1])
-	if f, err := session.ParseFinal(role, last); err == nil && f.Kind != "FINDING" {
-		return last
+	if f, line, ok := session.FinalIn(role, reply); ok && f.Kind != "FINDING" {
+		return line
 	}
 	if role != "investigator" {
 		return ""
 	}
+	lines := strings.Split(strings.TrimSpace(reply), "\n")
 	var rows []string
 	for _, l := range lines {
 		if l = strings.TrimSpace(l); strings.Count(l, "|") >= 6 {

@@ -8,10 +8,12 @@ import (
 	"github.com/TorratDev/the-eye/internal/spawner"
 )
 
-// openPR opens the PR for a task the reviewer passed (docs/pr-owner.md), from the branch the
-// executor pushed. If a PR is already open for that branch it returns that one, so a retry never
-// opens a second.
-func openPR(gh func(args ...string) (string, error), repo string, ex spawner.ExecutorDispatch, done, verdict string) (string, error) {
+// openPR pushes a task the reviewer passed from its worktree and opens its PR (docs/pr-owner.md).
+// If a PR is already open for the branch it returns that one, so a retry never opens a second.
+func openPR(git, gh func(args ...string) (string, error), repo string, ex spawner.ExecutorDispatch, done, verdict string) (string, error) {
+	if _, err := git("-C", ex.Worktree, "push", "-u", "origin", ex.Branch); err != nil {
+		return "", err
+	}
 	out, err := gh("pr", "list", "-R", repo, "--head", ex.Branch, "--state", "open", "--json", "url", "-q", ".[0].url")
 	if err != nil {
 		return "", err
@@ -33,10 +35,15 @@ func openPR(gh func(args ...string) (string, error), repo string, ex spawner.Exe
 }
 
 // ghRun runs gh, which holds the GitHub login.
-func ghRun(args ...string) (string, error) {
-	out, err := exec.Command("gh", args...).CombinedOutput()
+func ghRun(args ...string) (string, error) { return runTool("gh", args...) }
+
+// gitRun runs git.
+func gitRun(args ...string) (string, error) { return runTool("git", args...) }
+
+func runTool(name string, args ...string) (string, error) {
+	out, err := exec.Command(name, args...).CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("gh %s %s: %w: %s", args[0], args[1], err, strings.TrimSpace(string(out)))
+		return "", fmt.Errorf("%s %s: %w: %s", name, strings.Join(args, " "), err, strings.TrimSpace(string(out)))
 	}
 	return string(out), nil
 }

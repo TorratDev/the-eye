@@ -97,7 +97,7 @@ func plan(args []string) error {
 				rv := newReviewer(st, panes, d.Send, fwd.assign, func(n int, err error) {
 					alert(st, broker, "hub", decisionsPane, fmt.Sprintf("review of #%d: %v", n, err))
 				}, func(ex spawner.ExecutorDispatch, done, verdict string) {
-					url, err := openPR(ghRun, repo, ex, done, verdict)
+					url, err := openPR(gitRun, ghRun, repo, ex, done, verdict)
 					if err != nil {
 						// the task stays approved; a later PASS for it reuses an open PR, never a second one
 						alert(st, broker, "hub", decisionsPane, fmt.Sprintf("PR for #%d not opened: %v", ex.Issue, err))
