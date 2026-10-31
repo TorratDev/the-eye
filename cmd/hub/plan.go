@@ -110,6 +110,8 @@ func plan(args []string) error {
 						fmt.Fprintln(os.Stderr, "hub:", err)
 					}
 					fwd.note(fmt.Sprintf("[hub · #%d] PR opened: %s", ex.Issue, url))
+				}, func(n int, verdict string) {
+					fwd.note(fmt.Sprintf("[hub · #%d] REVISE %d times; latest %s. Decide the follow-up for what is left.", n, maxRevise, verdict))
 				})
 				return func(e hub.Event) {
 					act(e)
