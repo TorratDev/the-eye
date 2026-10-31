@@ -28,7 +28,7 @@ It never fails, so a hub that is down does not block the session.
 
 `decision.Act` reads the orchestrator's reply from the `Stop` payload's `last_assistant_message`. It holds the text of the turn's last assistant message, the same text as the last assistant entry in the transcript at `transcript_path` (checked in the #99 live run). Nothing has to parse the transcript to get the decision lines.
 
-The transcript (`transcript_path`, JSONL, one entry per line) is still the source for a session's full conversation: entries with `"type": "assistant"` or `"type": "user"` carry a `message` with `content` blocks (`text`, `tool_use`, `tool_result`). Other entry types are Claude Code's bookkeeping.
+The transcript (`transcript_path`, JSONL, one entry per line) is still the source for a session's full conversation: entries with `"type": "assistant"` or `"type": "user"` carry a `message` with `content` blocks (`text`, `tool_use`, `tool_result`). Other entry types are Claude Code's bookkeeping. `internal/transcript` reads it into turns.
 
 `Stop` payload from the live run (Claude Code 2.1.316; the reply is cut here):
 
