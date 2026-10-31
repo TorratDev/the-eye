@@ -70,7 +70,8 @@ func run(args []string) error {
 	if err != nil {
 		return err
 	}
-	return sync(owner, name, epic)
+	_, err = sync(owner, name, epic)
+	return err
 }
 
 // mcpServe runs the report tool over stdio for one session. It does not open the store: `hub serve`
@@ -235,24 +236,25 @@ func alert(st *hub.Store, broker *live.Broker, role, pane, message string) {
 	}
 }
 
-// sync prints every sub-issue with its state, blockers and ready flag. It dispatches nothing.
-func sync(owner, name string, epic int) error {
+// sync prints every sub-issue with its state, blockers and ready flag, and returns the verdicts.
+// It dispatches nothing.
+func sync(owner, name string, epic int) ([]hub.Verdict, error) {
 	token, err := hub.GhToken()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	issues, err := (&hub.Client{URL: graphQL, Token: token}).Epic(owner, name, epic)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	st, err := hub.OpenStore(stateFile)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer st.Close()
 	claims, err := st.Claims()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	verdicts, cycles := hub.Plan(issues, claims)
 
@@ -270,9 +272,9 @@ func sync(owner, name string, epic int) error {
 		fmt.Fprintf(os.Stderr, "cycle: %s\n", cycleText(c))
 	}
 	if len(cycles) > 0 {
-		return fmt.Errorf("%d dependency cycle(s); nothing on them is ready", len(cycles))
+		return nil, fmt.Errorf("%d dependency cycle(s); nothing on them is ready", len(cycles))
 	}
-	return nil
+	return verdicts, nil
 }
 
 // detail says why a sub-issue is or is not ready.
