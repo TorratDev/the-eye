@@ -246,6 +246,19 @@ func (s *Store) SubIssueForPane(pane string) (int, error) {
 	return n, err
 }
 
+// FinishTask moves a sub-issue that is executing to state, which frees its executor pane.
+// A task in any other state is left alone, so a late or repeated report changes nothing.
+func (s *Store) FinishTask(number int, state string) error {
+	_, err := s.db.Exec(`UPDATE tasks SET state = ? WHERE number = ? AND state = 'executing'`, state, number)
+	return err
+}
+
+// FinishPaneTask is FinishTask for whichever sub-issue is executing in pane.
+func (s *Store) FinishPaneTask(pane, state string) error {
+	_, err := s.db.Exec(`UPDATE tasks SET state = ? WHERE pane = ? AND state = 'executing'`, state, pane)
+	return err
+}
+
 // LastSession returns the session_id of the newest hook event from pane, or "" if none has one.
 func (s *Store) LastSession(pane string) (string, error) {
 	var id string

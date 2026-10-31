@@ -1,6 +1,7 @@
 package report
 
 import (
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -57,5 +58,33 @@ func TestSubmitRefusesBadReports(t *testing.T) {
 	}
 	if n, _ := st.Reports(22); n != 0 || len(c.bodies) != 0 {
 		t.Errorf("refused reports left %d stored and %d comments", n, len(c.bodies))
+	}
+}
+
+// An executor's report ends its executing task; a reviewer's report, or a task not executing, is left alone.
+func TestExecutorReportFinishesTask(t *testing.T) {
+	st, err := hub.OpenStore(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	for n, state := range map[int]string{22: "executing", 23: "executing", 24: "approved"} {
+		if err := st.SetTask(n, hub.Task{State: state, Pane: fmt.Sprintf("p%d", n)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	c := &fakeComments{}
+	for _, r := range []struct {
+		issue        int
+		role, status string
+	}{{22, "executor", "blocked"}, {23, "reviewer", "done"}, {24, "executor", "done"}} {
+		if err := Submit(st, c, r.issue, r.role, r.status, "x"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for n, want := range map[int]string{22: "blocked", 23: "executing", 24: "approved"} {
+		if task, _ := st.Task(n); task.State != want {
+			t.Errorf("#%d state %q, want %q", n, task.State, want)
+		}
 	}
 }
