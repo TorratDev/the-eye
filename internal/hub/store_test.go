@@ -7,6 +7,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func openTest(t *testing.T, path string) *Store {
@@ -174,5 +175,27 @@ func TestClaimSetsEpicOnReviseFirstRow(t *testing.T) {
 	}
 	if epic != 8 {
 		t.Fatalf("epic = %d, want 8", epic)
+	}
+}
+
+// LastSession is the newest session id from the pane's hook events; other panes and empty ids don't count.
+func TestLastSession(t *testing.T) {
+	st := openTest(t, filepath.Join(t.TempDir(), "state.db"))
+	for _, e := range []Event{
+		{Hook: "Stop", Role: "executor", Pane: "p6", Session: "old"},
+		{Hook: "Stop", Role: "executor", Pane: "p6", Session: "new"},
+		{Hook: "Stop", Role: "executor", Pane: "p6"},
+		{Hook: "Stop", Role: "executor", Pane: "p7", Session: "other"},
+	} {
+		e.ReceivedAt = time.Now()
+		if err := st.RecordEvent(e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if id, err := st.LastSession("p6"); err != nil || id != "new" {
+		t.Errorf("LastSession(p6) = %q, %v", id, err)
+	}
+	if id, err := st.LastSession("p9"); err != nil || id != "" {
+		t.Errorf("LastSession(p9) = %q, %v", id, err)
 	}
 }

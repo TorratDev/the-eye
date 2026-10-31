@@ -13,7 +13,7 @@ import (
 )
 
 func TestCommandRoles(t *testing.T) {
-	inv, err := Command("investigator", "p3", "it's read only")
+	inv, err := Command("investigator", "p3", "it's read only", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,11 +26,11 @@ func TestCommandRoles(t *testing.T) {
 		t.Errorf("investigator allowed an edit tool: %s", inv)
 	}
 
-	rev, _ := Command("reviewer", "p9", "x")
+	rev, _ := Command("reviewer", "p9", "x", "")
 	if !strings.Contains(rev, "--model claude-sonnet-5-5") {
 		t.Errorf("reviewer not on sonnet: %s", rev)
 	}
-	if _, err := Command("nobody", "p1", ""); err == nil {
+	if _, err := Command("nobody", "p1", "", ""); err == nil {
 		t.Error("unknown role succeeded, want error")
 	}
 }
@@ -44,7 +44,7 @@ func TestExecutorCanEdit(t *testing.T) {
 // Every role's session runs the hub's report tool through --mcp-config.
 func TestEveryRoleHasReportTool(t *testing.T) {
 	for kind := range launches {
-		cmd, err := Command(kind, "p1", "x")
+		cmd, err := Command(kind, "p1", "x", "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -70,7 +70,7 @@ func TestEveryRolePostsHooks(t *testing.T) {
 		}
 	}
 	for kind := range launches {
-		cmd, _ := Command(kind, "p1", "x")
+		cmd, _ := Command(kind, "p1", "x", "")
 		if !strings.Contains(cmd, "--settings "+shQuote(hookSettings)) {
 			t.Errorf("%s launch line lacks the hook settings: %s", kind, cmd)
 		}
@@ -97,5 +97,19 @@ func TestHookCommandPosts(t *testing.T) {
 	}
 	if p, want := <-got, (post{"/hooks", "executor", "p7", `{"hook_event_name":"Stop"}`}); p != want {
 		t.Fatalf("hook posted %+v, want %+v", p, want)
+	}
+}
+
+// Every launch line keeps herdr from recording the session, and a resume goes on the same line.
+func TestResumeLine(t *testing.T) {
+	cmd, err := Command("executor", "p6", "x", "cea7c612-66bb-4763-abb0-860d5dfe3e42")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(cmd, "HERDR_ENV=0 HUB_ROLE=executor HUB_PANE=p6 claude ") || !strings.HasSuffix(cmd, " --settings "+shQuote(hookSettings)+" --resume cea7c612-66bb-4763-abb0-860d5dfe3e42") {
+		t.Fatalf("resume line: %s", cmd)
+	}
+	if _, err := Command("executor", "p6", "x", "x; rm -rf ~"); err == nil {
+		t.Fatal("a session id with shell text was accepted")
 	}
 }

@@ -246,6 +246,16 @@ func (s *Store) SubIssueForPane(pane string) (int, error) {
 	return n, err
 }
 
+// LastSession returns the session_id of the newest hook event from pane, or "" if none has one.
+func (s *Store) LastSession(pane string) (string, error) {
+	var id string
+	err := s.db.QueryRow(`SELECT session FROM events WHERE pane = ? AND session IS NOT NULL AND session != '' ORDER BY id DESC LIMIT 1`, pane).Scan(&id)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	return id, err
+}
+
 // PaneBusy reports whether a sub-issue is executing in pane.
 func (s *Store) PaneBusy(pane string) (bool, error) {
 	var n int

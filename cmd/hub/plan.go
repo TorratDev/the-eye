@@ -54,6 +54,7 @@ func plan(args []string) error {
 	}
 	var cfg config.Config
 	var rendered map[string]string
+	var store *hub.Store // set once serve has opened it
 	return planSteps{
 		sync:     func() error { return sync(owner, name, epic) },
 		baseline: spawner.Baseline,
@@ -69,12 +70,14 @@ func plan(args []string) error {
 		layout: func() (map[string]string, error) { return spawner.Ensure(epic, *cwd) },
 		serve: func(panes map[string]string) (func() error, error) {
 			o.onEvent = func(st *hub.Store, broker *live.Broker) func(hub.Event) {
+				store = st
 				d := liveDeps(st, broker, owner+"/"+name, *cwd, cfg.Header["worktree_root"], epic, panes, rendered)
 				return actOnStop(d, showResult(st, broker))
 			}
 			return startServe(*o)
 		},
 		running: agentRunning,
+		session: func(pane string) (string, error) { return store.LastSession(pane) },
 		start:   spawner.StartOrchestrator,
 		send:    func(pane, text string) error { return spawner.SendWhenIdle(pane, text, 2*time.Minute) },
 	}.run(epic)
@@ -88,7 +91,8 @@ type planSteps struct {
 	layout   func() (map[string]string, error)
 	serve    func(panes map[string]string) (wait func() error, err error)
 	running  func(pane string) (bool, error)
-	start    func(pane, prompt string) error
+	session  func(pane string) (string, error) // the pane's last hub session, to resume
+	start    func(pane, prompt, resume string) error
 	send     func(pane, text string) error
 }
 
@@ -127,8 +131,18 @@ func (s planSteps) run(epic int) error {
 		fmt.Printf("hub: orchestrator already running in pane %s; not starting another\n", pane)
 		return wait()
 	}
-	if err := s.start(pane, prompt); err != nil {
+	// a pane the hub ran an orchestrator in before has lost it (a herdr restart, #126): resume that
+	// session with the hub's flags; it already has the epic
+	resume, err := s.session(pane)
+	if err != nil {
 		return err
+	}
+	if err := s.start(pane, prompt, resume); err != nil {
+		return err
+	}
+	if resume != "" {
+		fmt.Printf("hub: resumed orchestrator session %s in pane %s\n", resume, pane)
+		return wait()
 	}
 	if err := s.send(pane, fmt.Sprintf("Epic #%d.", epic)); err != nil {
 		return err

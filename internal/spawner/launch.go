@@ -3,6 +3,7 @@ package spawner
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/TorratDev/the-eye/internal/herdr"
@@ -22,16 +23,31 @@ var launches = map[string]Launch{
 	"reviewer":     {Model: "claude-sonnet-5-5", Tools: []string{"Read", "Grep", "Glob", "Bash"}},
 }
 
-// Command returns the shell line that starts one role's session in pane. The hub's role and
-// pane ID go in as env vars for the hooks.
-func Command(kind, pane, prompt string) (string, error) {
+// Command returns the shell line that starts one role's session in pane, or resumes session resume
+// when it is not "". The hub's role and pane ID go in as env vars for the hooks.
+//
+// HERDR_ENV=0 keeps herdr's SessionStart hook from recording the session. herdr resumes a recorded
+// session after a restart as plain `claude --resume <id>`, without this line's hooks, env and report
+// tool (#126). Unrecorded, the pane comes back as a shell, and the hub resumes the session with
+// this line instead.
+func Command(kind, pane, prompt, resume string) (string, error) {
 	l, ok := launches[kind]
 	if !ok {
 		return "", fmt.Errorf("unknown role %q", kind)
 	}
-	return fmt.Sprintf("HUB_ROLE=%s HUB_PANE=%s claude --model %s --append-system-prompt %s --allowedTools %s --mcp-config %s --settings %s",
-		kind, pane, l.Model, shQuote(prompt), strings.Join(l.Tools, ","), shQuote(mcpConfig), shQuote(hookSettings)), nil
+	cmd := fmt.Sprintf("HERDR_ENV=0 HUB_ROLE=%s HUB_PANE=%s claude --model %s --append-system-prompt %s --allowedTools %s --mcp-config %s --settings %s",
+		kind, pane, l.Model, shQuote(prompt), strings.Join(l.Tools, ","), shQuote(mcpConfig), shQuote(hookSettings))
+	if resume != "" {
+		// the id comes from a hook body, so only a plain session id goes on the line
+		if !sessionID.MatchString(resume) {
+			return "", fmt.Errorf("not a session id: %q", resume)
+		}
+		cmd += " --resume " + resume
+	}
+	return cmd, nil
 }
+
+var sessionID = regexp.MustCompile(`^[A-Za-z0-9-]{1,64}$`)
 
 // mcpConfig starts the hub's report tool for every session. The server reads the role from HUB_ROLE,
 // which Command sets in the same line, so the config carries no role.
@@ -53,9 +69,10 @@ var hookSettings = func() string {
 	return string(b)
 }()
 
-// Start types the role's launch line into an existing pane at its shell prompt.
-func Start(kind, pane, prompt string) error {
-	cmd, err := Command(kind, pane, prompt)
+// Start types the role's launch line into an existing pane at its shell prompt, resuming session
+// resume when it is not "".
+func Start(kind, pane, prompt, resume string) error {
+	cmd, err := Command(kind, pane, prompt, resume)
 	if err != nil {
 		return err
 	}
