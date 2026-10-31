@@ -50,11 +50,11 @@ func ChannelFlagAvailable() bool {
 
 // startOrchestrator checks the login, then types the orchestrator's launch line into pane.
 // Nothing is typed when the check fails. Channels are added only when the build has the flag.
-func startOrchestrator(check func() error, channels bool, pane, prompt string, run func(pane, cmd string) error) error {
+func startOrchestrator(check func() error, channels bool, pane, prompt, resume string, run func(pane, cmd string) error) error {
 	if err := check(); err != nil {
 		return err
 	}
-	cmd, err := Command("orchestrator", pane, prompt)
+	cmd, err := Command("orchestrator", pane, prompt, resume)
 	if err != nil {
 		return err
 	}
@@ -64,9 +64,10 @@ func startOrchestrator(check func() error, channels bool, pane, prompt string, r
 	return run(pane, cmd)
 }
 
-// StartOrchestrator launches the orchestrator in pane after the login check.
-func StartOrchestrator(pane, prompt string) error {
-	return startOrchestrator(CheckLogin, ChannelFlagAvailable(), pane, prompt, func(pane, cmd string) error {
+// StartOrchestrator launches the orchestrator in pane after the login check, resuming session
+// resume when it is not "".
+func StartOrchestrator(pane, prompt, resume string) error {
+	return startOrchestrator(CheckLogin, ChannelFlagAvailable(), pane, prompt, resume, func(pane, cmd string) error {
 		return herdr.PaneRun(pane, cmd)
 	})
 }

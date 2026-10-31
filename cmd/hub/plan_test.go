@@ -26,7 +26,8 @@ func fakeSteps(calls *[]string, fail string) planSteps {
 			return func() error { return step("wait") }, step("serve")
 		},
 		running: func(pane string) (bool, error) { return false, step("running " + pane) },
-		start:   func(pane, prompt string) error { return step("start " + pane + " " + prompt) },
+		session: func(pane string) (string, error) { return "", step("session " + pane) },
+		start:   func(pane, prompt, resume string) error { return step("start " + pane + " " + prompt + " " + resume) },
 		send:    func(pane, text string) error { return step("send " + pane + " " + text) },
 	}
 }
@@ -36,7 +37,7 @@ func TestPlanOrder(t *testing.T) {
 	if err := fakeSteps(&calls, "").run(95); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"sync", "baseline", "prompt", "layout", "serve", "running p1", "start p1 PROMPT", "send p1 Epic #95.", "wait"}
+	want := []string{"sync", "baseline", "prompt", "layout", "serve", "running p1", "session p1", "start p1 PROMPT ", "send p1 Epic #95.", "wait"}
 	if !slices.Equal(calls, want) {
 		t.Fatalf("calls = %q, want %q", calls, want)
 	}
@@ -69,6 +70,19 @@ func TestPlanSkipsLaunchWhenOrchestratorRuns(t *testing.T) {
 		t.Fatal(err)
 	}
 	if want := []string{"sync", "baseline", "prompt", "layout", "serve", "wait"}; !slices.Equal(calls, want) {
+		t.Fatalf("calls = %q, want %q", calls, want)
+	}
+}
+
+// A pane whose orchestrator was lost is resumed with the hub's flags, and the epic is not sent again.
+func TestPlanResumesLostOrchestrator(t *testing.T) {
+	var calls []string
+	s := fakeSteps(&calls, "")
+	s.session = func(string) (string, error) { return "cea7c612", nil }
+	if err := s.run(95); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"sync", "baseline", "prompt", "layout", "serve", "running p1", "start p1 PROMPT cea7c612", "wait"}; !slices.Equal(calls, want) {
 		t.Fatalf("calls = %q, want %q", calls, want)
 	}
 }
