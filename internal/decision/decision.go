@@ -48,6 +48,9 @@ func Route(reply string, worktree func(branch string) string) ([]Action, error) 
 			if err != nil {
 				return nil, err
 			}
+			if len(inv) == 0 {
+				continue
+			}
 			out = append(out, Action{Kind: "investigate", Investigate: inv})
 		case "TASK":
 			ex, err := task(n, body, worktree)
@@ -64,13 +67,17 @@ func Route(reply string, worktree func(branch string) string) ([]Action, error) 
 	return out, nil
 }
 
-// points reads "A=P1,P2 B=P3 C=P4" into one investigator dispatch per letter.
+// points reads "A=P1,P2 B=P3 C=P4" into one investigator dispatch per letter. A letter with no
+// points ("A=") gets no dispatch, so "A= B= C=" means nothing to investigate.
 func points(issue int, body string) ([]spawner.InvestigatorDispatch, error) {
 	var out []spawner.InvestigatorDispatch
 	for _, part := range strings.Fields(body) {
 		letter, list, ok := strings.Cut(part, "=")
 		if !ok {
 			return nil, fmt.Errorf("POINTS #%d: %q is not LETTER=points", issue, part)
+		}
+		if list == "" {
+			continue
 		}
 		out = append(out, spawner.InvestigatorDispatch{Letter: letter, Issue: issue, Points: strings.Split(list, ",")})
 	}
