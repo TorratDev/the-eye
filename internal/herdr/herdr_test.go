@@ -1,6 +1,7 @@
 package herdr
 
 import (
+	"errors"
 	"os/exec"
 	"testing"
 )
@@ -22,5 +23,18 @@ func TestPinnedVersion(t *testing.T) {
 	}
 	if _, err := AgentRead("", 1); err == nil {
 		t.Fatal("AgentRead with an empty target succeeded, want error")
+	}
+}
+
+// pane run prints nothing when it succeeds; a failed command with no output is still an error.
+func TestDecodeEmptyOutput(t *testing.T) {
+	if _, err := decode("pane", nil, nil); err != nil {
+		t.Errorf("empty success: %v", err)
+	}
+	if _, err := decode("pane", nil, errors.New("exit status 1")); err == nil {
+		t.Error("empty failure succeeded, want error")
+	}
+	if _, err := decode("pane", []byte(`{"error":{"code":"x","message":"y"}}`), nil); err == nil {
+		t.Error("error envelope succeeded, want error")
 	}
 }
