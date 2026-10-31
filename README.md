@@ -18,11 +18,14 @@ Each role's prompt is in [`prompts/`](prompts). The hub fills the placeholders f
 ## Commands
 
 ```bash
+go run ./cmd/hub plan <epic>          # sync, check the baseline, lay out herdr, serve, start the orchestrator and send it the epic
 go run ./cmd/hub sync <epic>          # print the epic's sub-issues and which are ready
 go run ./cmd/hub serve                # watcher page, POST /hooks, /events, POST /report on 127.0.0.1:8080
 go run ./cmd/hub serve --epic <n>     # also poll the epic's cloud worker reports every 30 s
 go run ./cmd/hub mcp --role <role>    # the report tool over stdio, for one session
 ```
+
+`hub plan` takes `--config` (default `repos/<name>.md`), `--cwd` (the target repo's checkout, where the panes start) and the `serve` flags. Run it from this repo, since it reads `prompts/` and `.hub/` relative to the current directory.
 
 `hub serve` holds the state store (`.hub/state.db`, gitignored) exclusively, so `hub sync` cannot run while it is up. Keep `serve` on localhost.
 
