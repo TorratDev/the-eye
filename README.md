@@ -45,6 +45,7 @@ go run ./cmd/hub mcp --role <role>    # the report tool over stdio, for one sess
 - `internal/herdr`: the only code that calls herdr, pinned to 0.9.5.
 - `internal/ingest`: `POST /hooks`, which stores hook events with their role and pane.
 - `internal/session`: the final-line parser and the session state model.
+- `internal/transcript`: reads a session's transcript (`transcript_path`) into turns.
 - `internal/report`: the `report` tool, both the store-side and the remote (stdio) form.
 - `internal/live`, `internal/ui`: SSE stream at `/events` and the watcher page (htmx).
 - `internal/relay`: forwards the hub's event stream into an orchestrator session.
