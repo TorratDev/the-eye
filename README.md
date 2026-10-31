@@ -62,7 +62,7 @@ Each phase is tracked as an epic. "Tested" means the Go tests pass; "live" means
 | 2. Spawner | #8 | done, tested | `hub plan` laid out all four role tabs and nine panes in herdr 0.9.5 and launched the orchestrator (#99); worktrees not yet run |
 | 3. Prompts | #17 | done, tested | rust-mm config renders all four prompts |
 | 4. Hooks and report tool | #25 | done, tested | the orchestrator's hooks reached `POST /hooks` and its `report` call was commented on the sub-issue (#99) |
-| 5. Web UI | #31 | done, tested | page loaded with curl; not loaded in a browser |
+| 5. Web UI | #31 | done, tested | loaded in Firefox; a posted hook updated the session row over SSE without a reload (#99) |
 | 6. Channel relay and orchestrator | #35 | partly | channel capability confirmed on the server side only; decisions are not acted on by a live hub |
 | 7. Cloud workers | #40 | done, tested | the poll loop has not run against GitHub |
 
