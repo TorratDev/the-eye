@@ -77,7 +77,7 @@ func TestExecutorReportFinishesTask(t *testing.T) {
 	for _, r := range []struct {
 		issue        int
 		role, status string
-	}{{22, "executor", "blocked"}, {23, "reviewer", "done"}, {24, "executor", "done"}} {
+	}{{22, "executor", "blocked"}, {23, "reviewer", "pass"}, {24, "executor", "done"}} {
 		if err := Submit(st, c, r.issue, r.role, r.status, "x"); err != nil {
 			t.Fatal(err)
 		}
@@ -85,6 +85,26 @@ func TestExecutorReportFinishesTask(t *testing.T) {
 	for n, want := range map[int]string{22: "blocked", 23: "executing", 24: "approved"} {
 		if task, _ := st.Task(n); task.State != want {
 			t.Errorf("#%d state %q, want %q", n, task.State, want)
+		}
+	}
+}
+
+// A reviewer reports a verdict, not done; other roles report done or blocked.
+func TestStatusesPerRole(t *testing.T) {
+	st, err := hub.OpenStore(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	c := &fakeComments{}
+	for _, ok := range [][2]string{{"reviewer", "pass"}, {"reviewer", "REVISE"}, {"executor", "done"}, {"investigator", "blocked"}} {
+		if err := Submit(st, c, 22, ok[0], ok[1], "x"); err != nil {
+			t.Errorf("%s %s refused: %v", ok[0], ok[1], err)
+		}
+	}
+	for _, bad := range [][2]string{{"reviewer", "done"}, {"executor", "pass"}} {
+		if err := Submit(st, c, 22, bad[0], bad[1], "x"); err == nil {
+			t.Errorf("%s %s accepted", bad[0], bad[1])
 		}
 	}
 }

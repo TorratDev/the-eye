@@ -79,8 +79,13 @@ func (f *forwarder) onStop(e hub.Event) bool {
 // ready tells the orchestrator about sub-issues ready to plan.
 func (f *forwarder) ready(issues []int) {
 	if len(issues) > 0 {
-		f.queue <- "Ready to plan: " + refList(issues) + "."
+		f.note("Ready to plan: " + refList(issues) + ".")
 	}
+}
+
+// note queues a message from the hub itself.
+func (f *forwarder) note(text string) {
+	f.queue <- text
 }
 
 // workerResult is what the orchestrator needs from a worker's reply: an executor's or reviewer's

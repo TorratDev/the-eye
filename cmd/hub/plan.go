@@ -13,6 +13,7 @@ import (
 	"github.com/TorratDev/the-eye/internal/hub"
 	"github.com/TorratDev/the-eye/internal/live"
 	"github.com/TorratDev/the-eye/internal/prompts"
+	"github.com/TorratDev/the-eye/internal/report"
 	"github.com/TorratDev/the-eye/internal/spawner"
 )
 
@@ -92,8 +93,23 @@ func plan(args []string) error {
 				d := liveDeps(st, broker, owner+"/"+name, *cwd, cfg.Header["worktree_root"], epic, panes, rendered)
 				d.Assign = fwd.assign
 				act := actOnStop(d, showResult(st, broker))
+				repo := owner + "/" + name
 				rv := newReviewer(st, panes, d.Send, fwd.assign, func(n int, err error) {
-					alert(st, broker, "hub", decisionsPane, fmt.Sprintf("review of #%d not sent: %v", n, err))
+					alert(st, broker, "hub", decisionsPane, fmt.Sprintf("review of #%d: %v", n, err))
+				}, func(ex spawner.ExecutorDispatch, done, verdict string) {
+					url, err := openPR(ghRun, repo, ex, done, verdict)
+					if err != nil {
+						// the task stays approved; a later PASS for it reuses an open PR, never a second one
+						alert(st, broker, "hub", decisionsPane, fmt.Sprintf("PR for #%d not opened: %v", ex.Issue, err))
+						return
+					}
+					if err := st.SetPR(ex.Issue, url); err != nil {
+						fmt.Fprintln(os.Stderr, "hub: store PR:", err)
+					}
+					if err := (report.GhCommenter{Repo: repo}).Comment(ex.Issue, "PR opened by the hub after review: "+url); err != nil {
+						fmt.Fprintln(os.Stderr, "hub:", err)
+					}
+					fwd.note(fmt.Sprintf("[hub · #%d] PR opened: %s", ex.Issue, url))
 				})
 				return func(e hub.Event) {
 					act(e)

@@ -41,6 +41,10 @@ CREATE TABLE IF NOT EXISTS dispatches (
 	number   INTEGER PRIMARY KEY,
 	executor TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS prs (
+	number INTEGER PRIMARY KEY,
+	url    TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS reports (
 	id         INTEGER PRIMARY KEY AUTOINCREMENT,
 	created_at TEXT NOT NULL,
@@ -265,6 +269,22 @@ func (s *Store) Dispatch(number int) (string, error) {
 		return "", nil
 	}
 	return d, err
+}
+
+// SetPR keeps the URL of the PR the hub opened for a sub-issue.
+func (s *Store) SetPR(number int, url string) error {
+	_, err := s.db.Exec(`INSERT INTO prs (number, url) VALUES (?, ?) ON CONFLICT(number) DO UPDATE SET url = excluded.url`, number, url)
+	return err
+}
+
+// PR returns the URL of the PR the hub opened for a sub-issue, or "".
+func (s *Store) PR(number int) (string, error) {
+	var url string
+	err := s.db.QueryRow(`SELECT url FROM prs WHERE number = ?`, number).Scan(&url)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	return url, err
 }
 
 // PaneTask returns the sub-issue in state whose task is on pane, or 0.

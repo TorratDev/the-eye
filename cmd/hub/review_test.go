@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -46,8 +47,12 @@ func TestDoneDispatchesReview(t *testing.T) {
 	}
 	type sent struct{ pane, text string }
 	sends := make(chan sent, 8)
+	passed := make(chan string, 4)
 	rv := newReviewer(st, panes, func(pane, text string) error { sends <- sent{pane, text}; return nil },
-		func(int, string) {}, func(n int, err error) { t.Errorf("#%d: %v", n, err) })
+		func(int, string) {}, func(n int, err error) { t.Errorf("#%d: %v", n, err) },
+		func(ex spawner.ExecutorDispatch, done, verdict string) {
+			passed <- fmt.Sprintf("#%d %s | %s", ex.Issue, done, verdict)
+		})
 	srv := httptest.NewServer(ui.Handler(st, live.NewBroker(), nil, rv.onStop, ui.Actions{}))
 	defer srv.Close()
 	next := func() sent {
@@ -87,5 +92,14 @@ func TestDoneDispatchesReview(t *testing.T) {
 	}
 	if task, _ := st.Task(21); task.State != "approved" {
 		t.Fatalf("#21 after PASS: %+v", task)
+	}
+	if p := <-passed; p != "#21 DONE: did it; verification: go test ok; branch: 21-x | PASS: matches the objective" {
+		t.Fatalf("passed %q", p)
+	}
+	postStopFrom(t, srv.URL, "reviewer", "r2", "REVISE: rename the flag")
+	select {
+	case p := <-passed:
+		t.Fatalf("a REVISE opened a PR: %q", p)
+	case <-time.After(300 * time.Millisecond):
 	}
 }
