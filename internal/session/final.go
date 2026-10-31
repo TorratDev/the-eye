@@ -38,6 +38,19 @@ func ParseFinal(role, line string) (Final, error) {
 	return Final{}, fmt.Errorf("unparsed final line for %s: %q", role, line)
 }
 
+// FinalIn finds the role's result line in a whole reply: the last line that parses with
+// ParseFinal. A session may add notes after it, so the result is not always the very last line.
+func FinalIn(role, reply string) (Final, string, bool) {
+	lines := strings.Split(strings.TrimSpace(reply), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if f, err := ParseFinal(role, line); err == nil {
+			return f, line, true
+		}
+	}
+	return Final{}, "", false
+}
+
 // TaskState is the task state an executor's or reviewer's final line leads to, the same states
 // cloud reports use (cloud.StateFor); "" for any other kind.
 func TaskState(kind string) string {

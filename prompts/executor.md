@@ -48,8 +48,7 @@ Before the first edit, read the repo's CLAUDE.md and the docs that `{{repo_rules
 7. Rebase onto the latest main and rerun step 5:
    `git -C <WT> fetch origin main && git -C <WT> rebase origin/main`
    If the rebase conflicts, stop with `BLOCKED: rebase conflict in <files>`. Do not resolve conflicts in files the task does not name.
-8. Stop and report. Do not push or open a PR yet.
-9. Only after the hub tells you that the reviewer answered PASS: push with `git -C <WT> push -u origin <n>-<short-slug>`. Do not run `gh pr create`; the hub opens the PR.
+8. Stop and report. Do not push or open a PR: after the reviewer's PASS, the hub pushes your branch from `<WT>` and opens the PR.
 
 ## 6. Evidence standard
 

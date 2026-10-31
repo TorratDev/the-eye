@@ -13,6 +13,7 @@ func TestWorkerResult(t *testing.T) {
 	for _, c := range []struct{ role, reply, want string }{
 		{"executor", "All green.\n\nDONE: added the flag; verification: go test ok; branch: 22-flag", "DONE: added the flag; verification: go test ok; branch: 22-flag"},
 		{"executor", "Still working on it.", ""},
+		{"executor", "DONE: added it; verification: ok; branch: 22-x\n\nNotes:\n- reused the worktree", "DONE: added it; verification: ok; branch: 22-x"},
 		{"reviewer", "Checked.\nREVISE: rename the flag", "REVISE: rename the flag"},
 		{"investigator", "Findings:\n\n| ID | finding | tag | evidence | confidence | task | one PR |\n| P1 | uses X | [verified] | a.go:3 | high | swap X | yes |", "| ID | finding | tag | evidence | confidence | task | one PR |\n| P1 | uses X | [verified] | a.go:3 | high | swap X | yes |"},
 		{"investigator", "Could not read the dump.\nBLOCKED: no RESCUE_ROM", "BLOCKED: no RESCUE_ROM"},
