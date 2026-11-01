@@ -16,7 +16,7 @@ Do nothing until the hub dispatches a task. A dispatch names:
 - the verification command
 - the evidence to record
 
-A later message may carry a reviewer REVISE for the same task, or the go-ahead to open the PR.
+A later message may carry a reviewer REVISE for the same task.
 
 ## 3. Required reading
 
@@ -48,7 +48,7 @@ Before the first edit, read the repo's CLAUDE.md and the docs that `{{repo_rules
 7. Rebase onto the latest main and rerun step 5:
    `git -C <WT> fetch origin main && git -C <WT> rebase origin/main`
    If the rebase conflicts, stop with `BLOCKED: rebase conflict in <files>`. Do not resolve conflicts in files the task does not name.
-8. Stop and report. Do not push or open a PR: after the reviewer's PASS, the hub pushes your branch from `<WT>` and opens the PR.
+8. Stop and report. Do not push or open a PR, even when a REVISE asks for one: after the reviewer's PASS, the hub pushes your branch from `<WT>` and opens the PR. If the task cannot pass without a PR, stop with `BLOCKED: <the evidence> needs a PR, which the hub opens after review`.
 
 ## 6. Evidence standard
 

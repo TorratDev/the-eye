@@ -195,7 +195,7 @@ func (h *epicHost) attach(epic int, panes map[string]string, announced map[int]b
 		fwd.note(fmt.Sprintf("[hub · #%d] REVISE %d times; latest %s. Decide the follow-up for what is left.", n, maxRevise, verdict))
 	})
 	h.mu.Lock()
-	h.run = &epicRun{act: actOnStop(d, showResult(h.st, h.broker)), rv: rv, fwd: fwd}
+	h.run = &epicRun{act: actOnStop(d, showResult(h.st, h.broker, fwd.note)), rv: rv, fwd: fwd}
 	h.mu.Unlock()
 	return nil
 }
