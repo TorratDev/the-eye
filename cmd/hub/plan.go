@@ -18,12 +18,12 @@ import (
 
 const planUsage = "usage: hub plan [--repo owner/name] [--config repos/<name>.md] [--cwd dir] <epic>"
 
-// plan starts an epic with one command: sync, baseline checks, herdr layout, serve, orchestrator, hand-off.
+// plan starts an epic with one command: sync, baseline checks, terminal names, serve, orchestrator, hand-off.
 func plan(args []string) error {
 	fs := flag.NewFlagSet("plan", flag.ContinueOnError)
 	o := serveFlags(fs)
 	cfgPath := fs.String("config", "", "per-repo config (default: repos/<name>.md)")
-	cwd := fs.String("cwd", "", "the target repo's checkout, where the panes start (default: current directory)")
+	cwd := fs.String("cwd", "", "the target repo's checkout, where the sessions start (default: current directory)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -106,7 +106,7 @@ type planSteps struct {
 	send     func(pane, text string) error
 }
 
-// run stops at the first failing step. The prompt renders before herdr is touched, so a bad
+// run stops at the first failing step. The prompt renders before any session starts, so a bad
 // config fails early, and serve is up before the orchestrator starts, so its hooks have a target.
 func (s planSteps) run(epic int) error {
 	if err := s.sync(); err != nil {
@@ -125,13 +125,13 @@ func (s planSteps) run(epic int) error {
 	}
 	pane := panes["orchestrator"]
 	if pane == "" {
-		return errors.New("herdr layout has no orchestrator pane")
+		return errors.New("no orchestrator pane")
 	}
 	wait, err := s.serve(panes)
 	if err != nil {
 		return err
 	}
-	// a re-run must not type a second launch line into a pane that already runs the orchestrator,
+	// a re-run must not start a second orchestrator while the first one's terminal is live,
 	// which already has the epic from the first run
 	running, err := s.running(pane)
 	if err != nil {
@@ -141,7 +141,7 @@ func (s planSteps) run(epic int) error {
 		fmt.Printf("hub: orchestrator already running in pane %s; not starting another\n", pane)
 		return wait()
 	}
-	// a pane the hub ran an orchestrator in before has lost it (a herdr restart, #126): resume that
+	// a pane the hub ran an orchestrator in before has lost it (an hc restart, #126): resume that
 	// session with the hub's flags; it already has the epic
 	resume, err := s.session("orchestrator")
 	if err != nil {
@@ -160,13 +160,17 @@ func (s planSteps) run(epic int) error {
 	return wait()
 }
 
-// agentRunning reports whether herdr sees an agent in pane. A plain shell reports "unknown".
+// agentRunning reports whether pane's hc terminal is live. Its program is the session's launch
+// line, so the terminal ends with the session and is removed (herdr.Run), and a missing one is not running.
 func agentRunning(pane string) (bool, error) {
-	p, err := herdr.PaneGet(pane)
+	t, err := herdr.Get(pane)
+	if herdr.NotFound(err) {
+		return false, nil
+	}
 	if err != nil {
 		return false, err
 	}
-	return p.AgentStatus != "" && p.AgentStatus != "unknown", nil
+	return t.State == "live", nil
 }
 
 // rolePrompts fills each role's prompt in prompts/ from the repo config, so a bad config fails

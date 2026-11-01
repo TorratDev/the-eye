@@ -240,7 +240,7 @@ func Handler(st *hub.Store, b *live.Broker, c report.Commenter, onEvent func(hub
 		w.Write(buf.Bytes())
 	})
 	mux.HandleFunc("POST /epics", func(w http.ResponseWriter, r *http.Request) {
-		// starting an epic runs code in herdr, so only the hub's own page may do it
+		// starting an epic runs code in a terminal, so only the hub's own page may do it
 		if !fromOwnPage(r) {
 			http.Error(w, "refused: not from the hub's page", http.StatusForbidden)
 			return

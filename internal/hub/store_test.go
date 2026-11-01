@@ -199,28 +199,3 @@ func TestLastSession(t *testing.T) {
 		t.Errorf("LastSession(p9) = %q, %v", id, err)
 	}
 }
-
-// LastSessionByName finds the session under a pane's name even after herdr gave the pane a new ID.
-func TestLastSessionByNameAfterPaneIDChange(t *testing.T) {
-	st := openTest(t, filepath.Join(t.TempDir(), "state.db"))
-	for _, p := range []struct{ pane, name string }{{"old-id", "orchestrator"}, {"new-id", "orchestrator"}, {"e1", "executor-1"}} {
-		if err := st.SetPaneName(p.pane, p.name); err != nil {
-			t.Fatal(err)
-		}
-	}
-	for _, e := range []Event{
-		{Hook: "Stop", Role: "orchestrator", Pane: "old-id", Session: "before-restart"},
-		{Hook: "Stop", Role: "executor", Pane: "e1", Session: "executor-session"},
-	} {
-		e.ReceivedAt = time.Now()
-		if err := st.RecordEvent(e); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if id, err := st.LastSessionByName("orchestrator"); err != nil || id != "before-restart" {
-		t.Errorf("LastSessionByName(orchestrator) = %q, %v", id, err)
-	}
-	if id, err := st.LastSessionByName("reviewer-1"); err != nil || id != "" {
-		t.Errorf("LastSessionByName(reviewer-1) = %q, %v", id, err)
-	}
-}

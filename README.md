@@ -1,6 +1,6 @@
 # the-eye: Claude Code orchestrator hub
 
-A local Go hub that runs Claude Code sessions against a repo's GitHub epics and sub-issues. GitHub is the source of truth: epics are plans, sub-issues are tasks, and labels and "blocked by" relations order the work. The hub keeps local task state, launches role sessions in herdr, applies their reports, and shows every session's state in a web page.
+A local Go hub that runs Claude Code sessions against a repo's GitHub epics and sub-issues. GitHub is the source of truth: epics are plans, sub-issues are tasks, and labels and "blocked by" relations order the work. The hub keeps local task state, launches role sessions in herdr-core (`hc`) terminals, which the herdr desktop app shows, applies their reports, and shows every session's state in a web page.
 
 Phase 9 turns the watcher into a minimal session app: start an epic, read a session's transcript, and send it messages, all on localhost. Until it lands, the UI only watches.
 
@@ -20,7 +20,7 @@ Each role's prompt is in [`prompts/`](prompts). The hub fills the placeholders f
 ## Commands
 
 ```bash
-go run ./cmd/hub plan <epic>          # sync, check the baseline, lay out herdr, serve, start the orchestrator and send it the epic
+go run ./cmd/hub plan <epic>          # sync, check the baseline, serve, start the orchestrator and send it the epic
 go run ./cmd/hub sync <epic>          # print the epic's sub-issues and which are ready
 go run ./cmd/hub serve                # watcher page, POST /hooks, /events, POST /report on 127.0.0.1:8080
 go run ./cmd/hub serve --epic <n>     # also poll the epic's cloud worker reports every 30 s
@@ -35,8 +35,7 @@ go run ./cmd/hub mcp --role <role>    # the report tool over stdio, for one sess
 
 - Go 1.26 (see `go.mod`)
 - `gh`, logged in to the target repo
-- herdr 0.9.5 (`herdr.PinnedVersion`)
-- herdr-core `hc` 0.1.16 (`herdr.HCPinnedVersion`), from the herdr desktop app; the hub moves onto it in Phase 10 (#152)
+- herdr-core `hc` 0.1.16 (`herdr.PinnedVersion`), from the herdr desktop app, with its core running (`hc server status`)
 - Claude Code with a claude.ai login, and the Ponytail plugin enabled
 - RTK (`rtk gain` must print its savings report)
 - `hub` on PATH, since `--mcp-config` starts the report tool with `hub mcp`: `go install ./cmd/hub` from this repo
@@ -45,8 +44,8 @@ go run ./cmd/hub mcp --role <role>    # the report tool over stdio, for one sess
 
 - `cmd/hub`: the entry point (`sync`, `serve`, `mcp`).
 - `internal/hub`: GitHub sync, the dependency graph, atomic claims, and the SQLite state store.
-- `internal/spawner`: herdr workspace, tab and pane layout; the launch line per role; worktrees; batch cap; idle-gated sends; the login and Ponytail/RTK checks.
-- `internal/herdr`: the only code that calls herdr (0.9.5) and herdr-core (`hc` 0.1.16, `hc.go`).
+- `internal/spawner`: one named `hc` terminal per role slot (`e<epic>-<slot>`); the launch line per role; worktrees; batch cap; idle-gated sends; the login and Ponytail/RTK checks.
+- `internal/herdr`: the only code that calls herdr-core (`hc` 0.1.16).
 - `internal/ingest`: `POST /hooks`, which stores hook events with their role and pane.
 - `internal/session`: the final-line parser and the session state model.
 - `internal/transcript`: reads a session's transcript (`transcript_path`) into turns.
@@ -79,7 +78,7 @@ Open items:
 - Cloud workers' report contract is in the worker prompts (`docs/cloud-reports.md`). Polling ran live against GitHub (#104); no real cloud worker has posted a report yet.
 - The hub opens a PR when a reviewer passes a task; the Progress list links each one (#113). Not yet run live.
 - `hub plan` and the page's epic form run one epic per `serve` process; restart `serve` to run another.
-- Session resume after a herdr restart matches panes by name, but only panes laid out by a run that recorded their names (the first run after this change).
+- Session resume matches a slot's terminal by name: a session whose terminal is gone (an hc restart) is resumed with `--resume` on the next work for that slot.
 
 ## Working rules
 

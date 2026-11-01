@@ -15,7 +15,7 @@ import (
 )
 
 // epicHost runs one epic inside a serve process. The store, broker and hook wiring are set up once
-// by startServe; start lays out herdr and starts the orchestrator, from the CLI (hub plan) or from
+// by startServe; start names the epic's hc terminals and starts the orchestrator, from the CLI (hub plan) or from
 // the page (the epic form). One epic runs per process.
 type epicHost struct {
 	owner, name string
@@ -129,7 +129,7 @@ func (h *epicHost) start(epic int, listen func() (func() error, error)) error {
 			h.cfg, h.prompt = cfg, rendered
 			return rendered["orchestrator"], nil
 		},
-		layout: func() (map[string]string, error) { return spawner.Ensure(epic, h.cwd) },
+		layout: func() (map[string]string, error) { return spawner.Panes(epic), nil },
 		serve: func(panes map[string]string) (func() error, error) {
 			wait := func() error { return nil }
 			if listen != nil {
@@ -141,9 +141,11 @@ func (h *epicHost) start(epic int, listen func() (func() error, error)) error {
 			return wait, h.attach(epic, panes, announced)
 		},
 		running: agentRunning,
-		session: func(name string) (string, error) { return h.st.LastSessionByName(name) },
-		start:   spawner.StartOrchestrator,
-		send:    func(pane, text string) error { return spawner.SendWhenIdle(pane, handoff, 2*time.Minute) },
+		session: func(name string) (string, error) { return h.st.LastSession(spawner.Panes(epic)[name]) },
+		start: func(pane, prompt, resume string) error {
+			return spawner.StartOrchestrator(pane, h.cwd, prompt, resume)
+		},
+		send: func(pane, text string) error { return spawner.SendWhenIdle(pane, handoff, 2*time.Minute) },
 	}.run(epic)
 	if err != nil && !h.attached() {
 		// nothing was attached, so a later start may try again
@@ -154,14 +156,8 @@ func (h *epicHost) start(epic int, listen func() (func() error, error)) error {
 	return err
 }
 
-// attach records the epic's panes and builds its hook handling. Pane IDs change when herdr
-// restarts, so each name is recorded with its current ID for session resume.
+// attach builds the epic's hook handling for its panes.
 func (h *epicHost) attach(epic int, panes map[string]string, announced map[int]bool) error {
-	for name, id := range panes {
-		if err := h.st.SetPaneName(id, name); err != nil {
-			return err
-		}
-	}
 	orchestrator := panes["orchestrator"]
 	fwd := newForwarder(panes,
 		func(text string) error { return toOrchestrator(channel, orchestrator, text) },

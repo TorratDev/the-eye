@@ -68,8 +68,8 @@ func hasChannels(version string) bool {
 	return true
 }
 
-// startOrchestrator checks the login, then types the orchestrator's launch line into pane.
-// Nothing is typed when the check fails. Channels are added only when the build has the flag.
+// startOrchestrator checks the login, then runs the orchestrator's launch line for pane.
+// Nothing runs when the check fails. Channels are added only when the build has the flag.
 func startOrchestrator(check func() error, channels bool, pane, prompt, resume string, run func(pane, cmd string) error) error {
 	if err := check(); err != nil {
 		return err
@@ -89,8 +89,7 @@ func startOrchestrator(check func() error, channels bool, pane, prompt, resume s
 const channelDialog = "local development"
 
 // acceptChannels waits for the development-channels warning in the pane and takes its default
-// ("I am using this for local development"). enter is retried until it succeeds, since herdr may
-// report the pane blocked a moment after the text shows.
+// ("I am using this for local development"). enter is retried until it succeeds.
 func acceptChannels(read func() (string, error), enter func() error, timeout, poll time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	for {
@@ -108,17 +107,18 @@ func acceptChannels(read func() (string, error), enter func() error, timeout, po
 	}
 }
 
-// StartOrchestrator launches the orchestrator in pane after the login check, resuming session
-// resume when it is not "".
-func StartOrchestrator(pane, prompt, resume string) error {
+// StartOrchestrator launches the orchestrator in a new hc terminal named pane, in cwd, after the
+// login check, resuming session resume when it is not "".
+func StartOrchestrator(pane, cwd, prompt, resume string) error {
 	channels := ChannelFlagAvailable()
 	return startOrchestrator(CheckLogin, channels, pane, prompt, resume, func(pane, cmd string) error {
-		if err := herdr.PaneRun(pane, cmd); err != nil || !channels {
+		if _, err := herdr.Run(pane, cwd, cmd, map[string]string{"role": "orchestrator"}); err != nil || !channels {
 			return err
 		}
+		// the screen text is the guard: claude may not report blocked for this startup dialog
 		return acceptChannels(
-			func() (string, error) { return herdr.PaneRead(pane, 40) },
-			func() error { return AnswerPrompt(pane, true) },
+			func() (string, error) { return herdr.Read(pane, 40) },
+			func() error { return herdr.Keys(pane, "enter") },
 			time.Minute, time.Second)
 	})
 }
