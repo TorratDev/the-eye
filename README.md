@@ -68,14 +68,14 @@ Each phase is tracked as an epic. "Tested" means the Go tests pass; "live" means
 | 4. Hooks and report tool | #25 | done, tested | the orchestrator's hooks reached `POST /hooks` and its `report` call was commented on the sub-issue (#99) |
 | 5. Web UI | #31 | done, tested | page loaded with curl; not loaded in a browser |
 | 6. Channel relay and orchestrator | #35 | partly | channel capability confirmed on the server side only; decisions are not acted on by a live hub |
-| 7. Cloud workers | #40 | done, tested | the poll loop has not run against GitHub |
+| 7. Cloud workers | #40 | done, tested | `serve --epic 95` polled GitHub, picked up a hand-posted BLOCKED report on #104, showed the alert and set the state (#104) |
 | 8. One-command epic run | #95 | done, tested | not run live yet (see open items) |
 | 9. Minimal session app | #96 | done, tested | not run in a browser yet; the page starts an epic, reads and messages sessions, answers prompts |
 
 Open items:
 - `hub plan` acts on the orchestrator's decisions from its `Stop` event (`last_assistant_message`, see `docs/hooks.md`). Results that need a human show on the page as a `hub` / `decisions` row. Not yet run live.
 - The channel flag is absent from the installed `claude` build (2.1.316), so the channel path cannot run here yet (#105).
-- Cloud workers' report contract is in the worker prompts (`docs/cloud-reports.md`). Polling has not run against GitHub yet (#104).
+- Cloud workers' report contract is in the worker prompts (`docs/cloud-reports.md`). Polling ran live against GitHub (#104); no real cloud worker has posted a report yet.
 - The hub opens a PR when a reviewer passes a task; the Progress list links each one (#113). Not yet run live.
 - `hub plan` and the page's epic form run one epic per `serve` process; restart `serve` to run another.
 - Session resume after a herdr restart matches panes by name, but only panes laid out by a run that recorded their names (the first run after this change).
