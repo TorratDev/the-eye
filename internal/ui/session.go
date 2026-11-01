@@ -19,7 +19,7 @@ const (
 )
 
 var turnsFragment = template.Must(template.New("turns").Funcs(template.FuncMap{"clip": clip}).Parse(
-	`{{if .Missing}}<p>no transcript yet</p>{{else}}{{if .Skipped}}<p>{{.Skipped}} earlier turns not shown</p>{{end}}
+	`{{if .Missing}}<p class="empty">no transcript yet</p>{{else}}{{if .Skipped}}<p class="muted">{{.Skipped}} earlier turns not shown</p>{{end}}
 {{range .Turns}}{{if eq .Kind "tool"}}<details class="tool"><summary>{{.Tool}}</summary><pre>{{clip .Text}}</pre></details>
 {{else if eq .Kind "result"}}<details class="result{{if .Error}} error{{end}}"><summary>{{if .Error}}error{{else}}result{{end}}</summary><pre>{{clip .Text}}</pre></details>
 {{else}}<div class="{{.Kind}}"><b>{{.Kind}}</b><pre>{{clip .Text}}</pre></div>
@@ -30,18 +30,17 @@ var sessionPage = template.Must(template.New("session").Parse(`<!doctype html>
 <title>Session {{.Pane}}</title>
 <script src="https://unpkg.com/htmx.org@1.9.12"></script>
 <script src="https://unpkg.com/htmx.org@1.9.12/dist/ext/sse.js"></script>
-<style>pre{white-space:pre-wrap;margin:.25em 0}.user{background:#eef}.error summary{color:#b00}</style>
+` + style + `
 </head><body>
-<p><a href="/">All sessions</a></p>
-<h1>Session {{.Pane}}</h1>
-<div hx-ext="sse" sse-connect="/events">
-<div id="turns" hx-get="/sessions/{{.Pane}}/turns" hx-trigger="sse:state">{{.Turns}}</div>
-</div>
-<form hx-post="/sessions/{{.Pane}}/send" hx-target="#sent" hx-on::after-request="if(event.detail.successful)this.reset()"
+<header><h1>Session {{.Pane}}</h1><a href="/">← All sessions</a></header>
+<main hx-ext="sse" sse-connect="/events">
+<div id="turns" class="turns" hx-get="/sessions/{{.Pane}}/turns" hx-trigger="sse:state">{{.Turns}}</div>
+<form class="send" hx-post="/sessions/{{.Pane}}/send" hx-target="#sent" hx-on::after-request="if(event.detail.successful)this.reset()"
  hx-on::response-error="document.getElementById('sent').textContent=event.detail.xhr.responseText">
-<label for="text">Message</label> <input id="text" name="text" size="80" maxlength="4000" required autocomplete="off">
+<label for="text" class="muted">Message</label> <input id="text" name="text" maxlength="4000" required autocomplete="off">
 <button>Send</button> <span id="sent" role="status"></span>
 </form>
+</main>
 </body></html>`))
 
 // Actions are what the page may do to a session. Each one runs code in a pane.
