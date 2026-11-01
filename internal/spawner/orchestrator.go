@@ -117,7 +117,7 @@ func StartOrchestrator(pane, prompt, resume string) error {
 			return err
 		}
 		return acceptChannels(
-			func() (string, error) { return herdr.AgentRead(pane, 40) },
+			func() (string, error) { return herdr.PaneRead(pane, 40) },
 			func() error { return AnswerPrompt(pane, true) },
 			time.Minute, time.Second)
 	})

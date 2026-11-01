@@ -134,9 +134,10 @@ func AgentSendKeys(target string, keys ...string) error {
 	return err
 }
 
-// AgentRead returns the recent terminal text of an agent pane.
-func AgentRead(target string, lines int) (string, error) {
-	out, err := exec.Command(Bin, "agent", "read", target, "--source", "recent", "--lines", fmt.Sprint(lines)).Output()
+// PaneRead returns the recent terminal text of a pane. Unlike `agent read`, it works before herdr
+// has detected an agent in the pane.
+func PaneRead(pane string, lines int) (string, error) {
+	out, err := exec.Command(Bin, "pane", "read", pane, "--source", "recent", "--lines", fmt.Sprint(lines)).Output()
 	return string(out), err
 }
 
