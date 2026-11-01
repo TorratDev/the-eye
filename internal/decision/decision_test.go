@@ -72,3 +72,22 @@ func TestLiveReplyDispatchesNothing(t *testing.T) {
 		t.Fatalf("live reply dispatched %+v", acts)
 	}
 }
+
+// Evidence that needs a PR or a push can't exist before review, since the hub opens the PR after
+// PASS (#169): such a TASK is refused before dispatch.
+func TestPREvidenceRefused(t *testing.T) {
+	wt := func(string) string { return "/wt" }
+	base := "TASK #22: slug=x | objective=add a line | files=docs/a.md | verify=go test ./... | evidence="
+	for evidence, refused := range map[string]bool{
+		"tail -n 1 docs/a.md shows the line; verify output":          false,
+		"verify output; PR body contains Closes #22":                 true,
+		"the pull request links #22":                                 true,
+		"branch pushed to origin":                                    true,
+		"git diff shows one added line; reproduces the prior output": false,
+	} {
+		_, err := Route(base+evidence, wt)
+		if (err != nil) != refused {
+			t.Errorf("evidence %q: err = %v, want refused %v", evidence, err, refused)
+		}
+	}
+}

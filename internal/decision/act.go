@@ -13,7 +13,7 @@ type Deps struct {
 	Worktree         func(issue int, slug string) (string, error)
 	FreeExecutorPane func() (string, error) // "" when every executor is busy
 	InvestigatorPane func(letter string) (string, error)
-	Send             func(pane, text string) error // SendWhenIdle in production
+	Send             func(pane, text string) error                         // SendWhenIdle in production
 	SetTask          func(ex *spawner.ExecutorDispatch, pane string) error // record the task as executing in pane
 	CreateIssue      func(title, body string) (int, error)
 	Escalate         func(text string) error

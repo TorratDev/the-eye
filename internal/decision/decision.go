@@ -100,8 +100,14 @@ func task(issue int, body string, worktree func(string) string) (*spawner.Execut
 	if _, err := d.Message(); err != nil {
 		return nil, fmt.Errorf("TASK #%d: %w", issue, err)
 	}
+	if prEvidence.MatchString(d.Evidence) {
+		return nil, fmt.Errorf("TASK #%d: evidence %q needs a PR or a push, but the hub opens the PR only after the reviewer's PASS: ask for evidence the worktree shows (#169)", issue, d.Evidence)
+	}
 	return d, nil
 }
+
+// prEvidence matches evidence that only exists once a branch is pushed or a PR is open.
+var prEvidence = regexp.MustCompile(`(?i)\bPRs?\b|\bpull request|\bpush(ed|es)?\b`)
 
 // fields splits "key=value | key=value" into a map; a value keeps any "=" inside it.
 func fields(body string) map[string]string {

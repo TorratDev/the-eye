@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/TorratDev/the-eye/internal/decision"
@@ -43,13 +44,23 @@ func actOnStop(d decision.Deps, done func(decision.Result, error)) func(hub.Even
 // decisionsPane is where the hub shows what it did with the orchestrator's decisions.
 const decisionsPane = "decisions"
 
+// maxRefusalNotes is how many refusals in a row the orchestrator is told about. Past that the page
+// shows them only, so an orchestrator that keeps sending bad lines doesn't loop.
+const maxRefusalNotes = 3
+
 // showResult prints what was dispatched and puts failures, queued tasks and errors on the page.
-func showResult(st *hub.Store, broker *live.Broker) func(decision.Result, error) {
+// A refused reply is also told to the orchestrator, so it can send its decision lines again.
+func showResult(st *hub.Store, broker *live.Broker, tell func(string)) func(decision.Result, error) {
+	var refusals atomic.Int32
 	return func(res decision.Result, err error) {
 		if err != nil {
 			alert(st, broker, "hub", decisionsPane, "decision lines refused: "+err.Error())
+			if refusals.Add(1) <= maxRefusalNotes {
+				tell("[hub] Your decision lines were refused: " + err.Error() + ". Send them again, fixed.")
+			}
 			return
 		}
+		refusals.Store(0)
 		for _, d := range res.Dispatched {
 			fmt.Println("hub:", d)
 		}

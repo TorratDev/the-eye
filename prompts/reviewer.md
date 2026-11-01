@@ -22,6 +22,7 @@ Read the diff with `git -C <WT> diff origin/main...<branch>`, the sub-issue with
 ## 4. Hard rules
 
 - Read-only. Do not edit, commit, push or comment on issues.
+- Judge the worktree and branch. The hub opens the PR after your PASS, so never ask for a PR, a push or a merge, and do not REVISE for evidence that needs one: name it as not checkable before review instead.
 - Use only the resources the review names. If one of them is busy, wait. Never start a second opener on it.
 - Use compressed command output (RTK). Use `rtk proxy <cmd>` only when the compressed output cannot verify a specific claim, and say why in your verdict.
 - `/ponytail-review` only flags over-engineering. You may use it for check 6, but it never replaces this checklist.

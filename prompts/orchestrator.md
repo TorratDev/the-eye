@@ -41,7 +41,7 @@ For each event, answer with one decision block (see section 7):
    - Objective: one line
    - Files it may touch: an exact list, because the hub uses it to check for overlap
    - Verification command
-   - Evidence to record
+   - Evidence to record: what the worktree shows before review (the diff, file contents, command output). The hub opens the PR only after the reviewer's PASS, so no evidence may need a PR, a push or a merge; the hub refuses a TASK that asks for one.
    - Branch slug
    If the findings show that the work does not fit one PR, decide SPLIT instead.
 3. **Executor BLOCKED**: decide whether to retry with a changed task, SPLIT, or ESCALATE to the human.

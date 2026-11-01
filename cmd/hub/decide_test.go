@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -110,5 +111,29 @@ func TestDoneFreesExecutorPane(t *testing.T) {
 	}
 	if task, _ := st.Task(21); task.State != "in review" {
 		t.Fatalf("task #21 state %q, want in review", task.State)
+	}
+}
+
+// A refused reply is told to the orchestrator so it can resend, but only maxRefusalNotes times in a
+// row; an accepted reply starts the count again (#169).
+func TestRefusalToldToOrchestrator(t *testing.T) {
+	st, err := hub.OpenStore(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	var told []string
+	show := showResult(st, live.NewBroker(), func(text string) { told = append(told, text) })
+	refused := errors.New(`TASK #22: evidence "PR body contains Closes #22" needs a PR or a push`)
+	for range maxRefusalNotes + 2 {
+		show(decision.Result{}, refused)
+	}
+	if len(told) != maxRefusalNotes || !strings.Contains(told[0], "Send them again") || !strings.Contains(told[0], "PR body contains") {
+		t.Fatalf("told %d notes, want %d naming the refusal: %q", len(told), maxRefusalNotes, told)
+	}
+	show(decision.Result{}, nil)
+	show(decision.Result{}, refused)
+	if len(told) != maxRefusalNotes+1 {
+		t.Errorf("after an accepted reply, a refusal was not told: %d notes", len(told))
 	}
 }
