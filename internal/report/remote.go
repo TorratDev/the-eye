@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -42,9 +44,15 @@ func Remote(hubURL, role string) server.ToolHandlerFunc {
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("hub unreachable: %v", err)), nil
 		}
-		res.Body.Close()
+		defer res.Body.Close()
 		if res.StatusCode != http.StatusNoContent {
-			return mcp.NewToolResultError(fmt.Sprintf("hub refused the report: %s", res.Status)), nil
+			// the hub writes why it refused (report.Submit's error), so the session can correct its call
+			reason, _ := io.ReadAll(io.LimitReader(res.Body, 1<<10))
+			msg := "hub refused the report: " + res.Status
+			if r := strings.TrimSpace(string(reason)); r != "" {
+				msg += ": " + r
+			}
+			return mcp.NewToolResultError(msg), nil
 		}
 		return mcp.NewToolResultText("reported"), nil
 	}
