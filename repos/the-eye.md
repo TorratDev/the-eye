@@ -12,7 +12,7 @@ shared_files: go.mod, go.sum
 - Keep changes small and reuse what internal/ already has (README "Layout").
 
 ## orchestrator
-- Plan and phase order: the plan document at the repo root and the README "Status" table.
+- Plan and phase order: the plan document at the repo root and the phase epics on GitHub (label `epic`).
 
 ## executor
 - Checks before DONE: gofmt -l . prints nothing; go vet ./...; go test ./...

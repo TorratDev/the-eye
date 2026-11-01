@@ -83,29 +83,6 @@ Each role's prompt is in [`prompts/`](prompts). The hub fills its placeholders f
 - `internal/cloud`: reads cloud workers' GitHub comments and applies them, with claims in view.
 - `internal/config`, `internal/prompts`: per-repo config, and prompt rendering with a check that every placeholder is filled.
 
-## Status
-
-Each phase is tracked as an epic. "Tested" means the Go tests pass; "live" means run against real Claude Code, `hc` or GitHub.
-
-| Phase | Epic | Code | Live |
-| --- | --- | --- | --- |
-| 1. Hub skeleton | #1 | done | `sync` run against this repo |
-| 2. Spawner | #8 | done, tested | first on herdr panes (#99), now `hc` terminals (Phase 10); worktrees made for every live task |
-| 3. Prompts | #17 | done, tested | rust-mm and the-eye configs render all four prompts |
-| 4. Hooks and report tool | #25 | done, tested | hooks reach `POST /hooks` and `report` calls are commented on the sub-issue (#99) |
-| 5. Web UI | #31 | done, tested | pages viewed in a browser and restyled (#150) |
-| 6. Channel relay and orchestrator | #35 | superseded | the relay ran live (#105, #146), then `hc send` replaced it (#155, `docs/channels.md`) |
-| 7. Cloud workers | #40 | done, tested | `serve --epic 95` polled GitHub, picked up a hand-posted BLOCKED report on #104, showed the alert and set the state |
-| 8. One-command epic run | #95 | done, tested | throwaway epics ran plan → task → review → PR end to end (#139, #147, #158, #162) |
-| 9. Minimal session app | #96 | done, tested | pages viewed in a browser; starting an epic, messaging a session and answering a prompt from the page not yet exercised live |
-| 10. Sessions on herdr-core (`hc`) | #152 | done, tested | epics #158 and #162 ran on `hc` terminals with `hc send` forwards; with the herdr app open, an epic's sessions share an `epic <n>` space (#156) |
-
-Open items:
-- The `report` tool shows only "400 Bad Request" when the hub refuses a report; the hub's reason is dropped, so a session can't correct its call (seen with the reviewer in #147; #168).
-- The orchestrator can list "PR body contains Closes #n" as task evidence, though the hub opens the PR only after `PASS`. The reviewer then asks for a PR, and in #147 the executor opened one itself (#169).
-- No real cloud worker has posted a report yet; the contract is in the worker prompts (`docs/cloud-reports.md`).
-- Each executor and reviewer check runs `go test ./...`, whose `hc` live test briefly starts and removes a `hub-test-…` terminal.
-
 ## Working rules
 
 - Every change goes through a PR into `main`, and the PR closes its sub-issue.
