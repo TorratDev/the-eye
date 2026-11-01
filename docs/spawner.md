@@ -1,20 +1,27 @@
-# Spawner: herdr calls
+# Spawner: hc calls
 
-herdr is pinned to **0.9.5** (`herdr.PinnedVersion`). The spawner reaches it only through `internal/herdr`, and `TestPinnedVersion` fails when the installed version drifts.
+The hub runs its sessions as herdr-core (`hc`) terminals, pinned to **0.1.16** (`herdr.PinnedVersion`). It reaches `hc` and the herdr app only through `internal/herdr`, and `TestLive` fails when the installed version drifts. Phase 10 (#152) moved it off the herdr 0.9.5 TUI; the #151 spike has the call-by-call comparison.
 
-| Wrapper | herdr command | Used for |
+| Wrapper | Command | Used for |
 | --- | --- | --- |
-| `Version` | `herdr --version` | Pin check |
-| `WorkspaceList` | `herdr workspace list` | Find an epic's workspace |
-| `WorkspaceCreate` | `herdr workspace create --cwd --label --no-focus` | One workspace per epic |
-| `TabCreate` | `herdr tab create --workspace --cwd --label --no-focus` | One tab per role |
-| `PaneSplit` | `herdr pane split <pane> --direction --cwd` | Extra panes for role sessions |
-| `PaneRun` | `herdr pane run <pane> <command>` | Start the shell command in a pane |
-| `AgentRead` | `herdr agent read <target> --source recent --lines N` | Secondary state signal; plain text |
+| `Version` | `hc --version` | Pin check |
+| `Run` | `hc run --json --bg --no-parent --rm --name <n> --label k=v -- sh -c <line>` | Start a session's launch line in its own terminal |
+| `Get` | `hc get --json <t>` | Is the terminal live, and the session's own status |
+| `Read` | `hc read --json --lines N <t>` | The screen, before the session reports too |
+| `Keys` | `hc keys --json <t> enter\|esc` | Allow or deny a permission prompt |
+| `Send` | `hc send --json <t> <text>` | Forward results and page messages, mid-turn |
+| `Wait` | `hc wait --json --timeout S <t>` | Wait for a turn to end |
+| `Label` | `hc label --json <t> k=v` | Put a live terminal in the app space |
+| `AppSpace` | `herdr-app ls`, `herdr-app do space.new` | Find or make the epic's `epic <n>` space when the window is open |
 
 Notes:
-- The JSON-producing commands print an envelope: `{"id":…,"result":{…}}` on success, `{"id":…,"error":{"code","message"}}` on failure. Seen for `workspace list`, `workspace get`, `agent list` and `pane list`, and the error case for `agent read`; the field names for create, split and run follow the bundled API schema (`herdr api schema --json`).
-- Only read-only calls were run against the live session. Create, split and run were not, so they are untested.
+- **Names.** Each role slot's terminal is named `e<epic>-<slot>` (`spawner.Panes`), e.g. `e158-executor-1`. The name is the pane ID everywhere in the hub: store, hooks (`HUB_PANE`), page links. `hc` refuses a second live terminal with the same name (`name_taken`), so a slot can't run twice.
+- **Lifetime.** `--rm` removes a terminal when its session exits, so a missing terminal means the session isn't running; the hub resumes it with `--resume <last session of that terminal>` on the slot's next work. `--no-parent` keeps sessions alive, and free of `hc` notes, when the hub itself runs in an `hc` terminal. Sessions survive `hub` restarts and `hc server restart`.
+- **Status** is the session's own report (`idle`, `working`, `done`, `blocked` with `kind` and `msg`, `error`); Claude Code reports it without setup. A terminal that hasn't reported yet has no status and isn't ready for input.
+- **Sending.** `hc send` pastes and presses Enter once nobody has typed for about three seconds. It reaches a session mid-turn and refuses while the session is blocked on a prompt (`kind` `blocked`), so a forward never answers a dialog. Dispatches to sessions that just started still wait for `idle` (`SendWhenIdle`).
+- **Errors.** `hc` prints `{"error":{"kind","message","hint"}}` on stderr with a nonzero exit; the wrapper returns it as `*herdr.Error` (`herdr.NotFound` checks `not_found`).
+- **App space.** A terminal labeled `herdr.space=<id>` gets a tab in that space. `space.new` always opens a shell tab first; the hub names it "shell". With no window open, `herdr-app ls` says "no Herdr window" and the hub skips the space.
+- **Tested.** `TestLive` runs every `hc` call on a `cat` terminal against the running core. The Claude-specific behavior (status reports, blocked with `kind: permission`, refused sends, mid-turn delivery) was checked in the #151 spike and the live epics #158 and #162.
 
 ## Hook order (observed)
 
@@ -42,7 +49,7 @@ What this shows:
 - The hub's `PreToolUse` saw the original command. Both `PreToolUse` hooks get the same input, so the run order of RTK's and the hub's `PreToolUse` is not recorded here, and the timestamps alone do not settle it. Do not rely on either running first.
 - The first run (`echo`) showed the same pattern, except the command was not rewritten. RTK rewrites only some commands.
 
-Not checked: the Ponytail hooks and the herdr `SessionStart` hook were not logged, and the order of the hub's `Notification` hook is untested because no hub hook exists yet.
+Not checked: the Ponytail hooks and the herdr `SessionStart` hook (from the herdr TUI's Claude integration; launch lines set `HERDR_ENV=0` against it) were not logged, and the order of the hub's `Notification` hook is untested because no hub hook exists yet.
 
 ## Ponytail context overhead (one sample each)
 

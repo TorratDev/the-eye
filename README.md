@@ -101,8 +101,8 @@ Each phase is tracked as an epic. "Tested" means the Go tests pass; "live" means
 | 10. Sessions on herdr-core (`hc`) | #152 | done, tested | epics #158 and #162 ran on `hc` terminals with `hc send` forwards; with the herdr app open, an epic's sessions share an `epic <n>` space (#156) |
 
 Open items:
-- The `report` tool shows only "400 Bad Request" when the hub refuses a report; the hub's reason is dropped, so a session can't correct its call (seen with the reviewer in #147).
-- The orchestrator can list "PR body contains Closes #n" as task evidence, though the hub opens the PR only after `PASS`. The reviewer then asks for a PR, and in #147 the executor opened one itself.
+- The `report` tool shows only "400 Bad Request" when the hub refuses a report; the hub's reason is dropped, so a session can't correct its call (seen with the reviewer in #147; #168).
+- The orchestrator can list "PR body contains Closes #n" as task evidence, though the hub opens the PR only after `PASS`. The reviewer then asks for a PR, and in #147 the executor opened one itself (#169).
 - No real cloud worker has posted a report yet; the contract is in the worker prompts (`docs/cloud-reports.md`).
 - Each executor and reviewer check runs `go test ./...`, whose `hc` live test briefly starts and removes a `hub-test-…` terminal.
 
