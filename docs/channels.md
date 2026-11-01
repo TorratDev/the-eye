@@ -1,21 +1,26 @@
-# Channels (#36, #105)
+# Channels (#36, #105, #155)
 
-When `claude` is 2.1.80 or later, the hub launches the orchestrator with
-`--dangerously-load-development-channels server:hub` and `HUB_CHANNEL=1`. Its `hub mcp` then relays
-the hub's `/channel` stream into the session, so worker results and ready sub-issues reach the
-orchestrator mid-turn. With no relay connected the hub types them into the pane once it is idle, as
-before.
+The hub no longer uses Claude Code channels. It sends the orchestrator worker results and ready
+sub-issues with `hc send` (herdr-core), which reaches a session mid-turn and refuses while the
+session waits on a permission prompt, so a forward never answers a dialog.
 
-## What the live run (claude 2.1.316, mcp-go v1.5.0) showed
+## Why the channel relay went
 
-- claude shows a "WARNING: Loading development channels" dialog on every launch with the flag. The
-  hub presses Enter on it (`spawner.acceptChannels`); until then the pane is blocked.
-- The server must declare `experimental["claude/channel"]`; `server.WithExperimental` does it for
-  both protocol eras (an `AfterInitialize` hook never runs on 2026-07-28, which has no initialize).
-- claude skips channels on protocol 2026-07-28 ("no unsolicited notification path"), so `hub mcp`
-  offers only the legacy versions for the orchestrator.
-- The notification is `notifications/claude/channel` with params `{content, meta?}`; meta keys must
-  match `^[a-zA-Z_][a-zA-Z0-9_]*$`.
-- claude prints "server:hub · no MCP server configured with that name" at startup for a server from
-  `--mcp-config`, then registers the channel anyway once the server connects
-  (`~/.cache/claude-cli-nodejs/<project>/mcp-logs-hub/`: "Channel notifications registered").
+The relay worked live (PR #146, epic #147): `hub mcp` declared `claude/channel` and relayed the
+hub's `/channel` stream as `notifications/claude/channel`. It cost:
+
+- `--dangerously-load-development-channels server:hub` on the orchestrator's launch, and a
+  "Loading development channels" warning on every launch that the hub had to answer.
+- Pinning `hub mcp` to the legacy MCP protocol, since claude skips channels on 2026-07-28
+  ("no unsolicited notification path").
+- A lost message when the relay dropped between the hub's check and its publish.
+
+The #151 spike showed `hc send` does the same job without any of it: a send during a 20-second
+tool call reached Claude in the same turn.
+
+## Notes kept from the live runs (claude 2.1.316, mcp-go v1.5.0)
+
+- The channel notification is `notifications/claude/channel` with params `{content, meta?}`; meta
+  keys must match `^[a-zA-Z_][a-zA-Z0-9_]*$`.
+- A server must declare `experimental["claude/channel"]`; `server.WithExperimental` does it for both
+  protocol eras.

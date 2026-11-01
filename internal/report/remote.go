@@ -51,8 +51,8 @@ func Remote(hubURL, role string) server.ToolHandlerFunc {
 }
 
 // RemoteServer is the stdio MCP server a session runs for the report tool.
-func RemoteServer(hubURL, role string, opts ...server.ServerOption) *server.MCPServer {
-	s := server.NewMCPServer("hub-report", "0.1.0", opts...)
+func RemoteServer(hubURL, role string) *server.MCPServer {
+	s := server.NewMCPServer("hub-report", "0.1.0")
 	s.AddTool(Tool(), Remote(hubURL, role))
 	return s
 }

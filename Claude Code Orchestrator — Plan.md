@@ -101,9 +101,9 @@ Hooks are the primary state signal; herdr is used to spawn sessions and as a sec
 | Claude Code hooks: Stop, Notification, PostToolUse | Turn finished, permission prompt, tool errors | POST `/hooks` with role and pane ID from env vars |
 | `report` MCP tool | Status and summary of the task | Hub stores it and comments it on the issue |
 | Final line in the pane | DONE/BLOCKED or reviewer verdict | Parsed by the Stop hook as fallback |
-| herdr agent state | Working, idle, blocked | `herdr agent read` / socket API |
+| Agent state | Working, idle, done, blocked (with why) | `hc get`: the session's own status report (herdr-core, #152) |
 | GitHub | Cloud workers' comments and PRs | Polling (decided in `docs/cloud-reports.md`) |
-| Channel relay | Hub events into the orchestrator session | Go stdio MCP (`mark3labs/mcp-go`) subscribing to `/events` over SSE |
+| Hub to orchestrator | Worker results and ready sub-issues, mid-turn | `hc send` (replaced the channel relay, #155) |
 
 The web UI subscribes to the same SSE stream (Go plus htmx) and shows sessions, states, errors and issue progress.
 
@@ -116,14 +116,14 @@ Each phase ends with something runnable; cloud workers come last.
 3. **Prompts**: the four generic role prompts plus the per-repo `{{repo_rules}}` config.
 4. **Hooks and report tool**: `/hooks` ingestion, `report` MCP tool, session state model.
 5. **Web UI**: SSE plus htmx view of sessions, states, errors and issue progress.
-6. **Channel relay and orchestrator session**: push hub events into the orchestrator.
+6. **Channel relay and orchestrator session**: push hub events into the orchestrator. Superseded by `hc send` in Phase 10.
 7. **Cloud workers**: report through GitHub, ingested by webhook or polling.
 8. **One-command epic run**: `hub plan <epic>` carries an epic from planning to merged PRs, live against herdr, Claude Code and GitHub.
 9. **Minimal session app**: on the watcher page, start an epic, open a session, read its transcript, and send it a message. Localhost only.
 
 ## Risks and open decisions
 
-- **Channels are a research preview**: they need `--dangerously-load-development-channels` and a claude.ai login, and don't register with `-p` or the Agent SDK.
+- **Channels are a research preview** (resolved: the hub uses `hc send` instead, #155): they need `--dangerously-load-development-channels` and a claude.ai login, and don't register with `-p` or the Agent SDK.
 - **mark3labs/mcp-go capability**: confirm `experimental.claude/channel` appears in the `initialize` response (set via the AfterInitialize hook).
 - **Usage limits**: 9 parallel sessions (1 + 3 + 3 + 2) will hit subscription limits fast. Start sessions only when a batch needs them.
 - **Context overhead**: Ponytail injects its ruleset into every session and subagent; measure token use with and without it on the first epic.

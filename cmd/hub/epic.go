@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/TorratDev/the-eye/internal/config"
+	"github.com/TorratDev/the-eye/internal/herdr"
 	"github.com/TorratDev/the-eye/internal/hub"
 	"github.com/TorratDev/the-eye/internal/live"
 	"github.com/TorratDev/the-eye/internal/report"
@@ -160,7 +161,7 @@ func (h *epicHost) start(epic int, listen func() (func() error, error)) error {
 func (h *epicHost) attach(epic int, panes map[string]string, announced map[int]bool) error {
 	orchestrator := panes["orchestrator"]
 	fwd := newForwarder(panes,
-		func(text string) error { return toOrchestrator(channel, orchestrator, text) },
+		func(text string) error { return herdr.Send(orchestrator, text) },
 		func(text string, err error) {
 			alert(h.st, h.broker, "hub", decisionsPane, fmt.Sprintf("not forwarded to the orchestrator (%v): %s", err, text))
 		})

@@ -5,31 +5,14 @@ import (
 	"fmt"
 	"strings"
 	gosync "sync"
-	"time"
 
 	"github.com/TorratDev/the-eye/internal/hub"
-	"github.com/TorratDev/the-eye/internal/live"
 	"github.com/TorratDev/the-eye/internal/session"
-	"github.com/TorratDev/the-eye/internal/spawner"
 )
 
-// orchestratorWait is how long a forwarded message waits for the orchestrator to finish a turn.
-const orchestratorWait = 10 * time.Minute
-
-// toOrchestrator sends text over the channel when the orchestrator's relay is connected, and
-// otherwise types it into its pane once the pane is idle.
-// shortcut: a relay that drops between the check and the publish loses that message; queue per
-// client if that shows up in live runs.
-func toOrchestrator(ch *live.Broker, pane, text string) error {
-	if ch.Clients() > 0 {
-		ch.Publish("message", text)
-		return nil
-	}
-	return spawner.SendWhenIdle(pane, text, orchestratorWait)
-}
-
 // forwarder sends the orchestrator what its prompt waits for: worker results and ready sub-issues.
-// Messages go out one at a time, in order, each once the orchestrator is idle.
+// Messages go out one at a time, in order. hc send reaches the orchestrator mid-turn; it refuses
+// while the orchestrator waits on a prompt, and failed then shows the message on the page.
 type forwarder struct {
 	names  map[string]string // pane ID -> pane name
 	send   func(text string) error
