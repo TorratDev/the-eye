@@ -51,7 +51,6 @@ go run ./cmd/hub mcp --role <role>    # the report tool over stdio, for one sess
 - `internal/transcript`: reads a session's transcript (`transcript_path`) into turns.
 - `internal/report`: the `report` tool, both the store-side and the remote (stdio) form.
 - `internal/live`, `internal/ui`: SSE stream at `/events` and the watcher page (htmx).
-- `internal/relay`: forwards the hub's event stream into an orchestrator session.
 - `internal/decision`: parses the orchestrator's `POINTS`, `TASK`, `FOLLOWUP` and `ESCALATE` lines and acts on them through injected effects.
 - `internal/cloud`: reads cloud workers' GitHub comments and applies them, with claims in view.
 - `internal/config`, `internal/prompts`: per-repo config, and prompt rendering with a check that every placeholder is filled.
@@ -67,14 +66,14 @@ Each phase is tracked as an epic. "Tested" means the Go tests pass; "live" means
 | 3. Prompts | #17 | done, tested | rust-mm config renders all four prompts |
 | 4. Hooks and report tool | #25 | done, tested | the orchestrator's hooks reached `POST /hooks` and its `report` call was commented on the sub-issue (#99) |
 | 5. Web UI | #31 | done, tested | page loaded with curl; not loaded in a browser |
-| 6. Channel relay and orchestrator | #35 | partly | channel capability confirmed on the server side only; decisions are not acted on by a live hub |
+| 6. Channel relay and orchestrator | #35 | superseded | the relay ran live (#105, #146), then `hc send` replaced it (#155, `docs/channels.md`) |
 | 7. Cloud workers | #40 | done, tested | `serve --epic 95` polled GitHub, picked up a hand-posted BLOCKED report on #104, showed the alert and set the state (#104) |
 | 8. One-command epic run | #95 | done, tested | not run live yet (see open items) |
 | 9. Minimal session app | #96 | done, tested | not run in a browser yet; the page starts an epic, reads and messages sessions, answers prompts |
+| 10. Sessions on herdr-core (`hc`) | #152 | partly | throwaway epic #158 ran end to end on `hc` terminals (#154); forwards use `hc send` (#155); the app view (#156) is open |
 
 Open items:
 - `hub plan` acts on the orchestrator's decisions from its `Stop` event (`last_assistant_message`, see `docs/hooks.md`). Results that need a human show on the page as a `hub` / `decisions` row. Not yet run live.
-- The channel flag is absent from the installed `claude` build (2.1.316), so the channel path cannot run here yet (#105).
 - Cloud workers' report contract is in the worker prompts (`docs/cloud-reports.md`). Polling ran live against GitHub (#104); no real cloud worker has posted a report yet.
 - The hub opens a PR when a reviewer passes a task; the Progress list links each one (#113). Not yet run live.
 - `hub plan` and the page's epic form run one epic per `serve` process; restart `serve` to run another.

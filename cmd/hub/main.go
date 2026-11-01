@@ -12,17 +12,15 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
-	gosync "sync"
 	"time"
 
 	"github.com/TorratDev/the-eye/internal/cloud"
+	"github.com/TorratDev/the-eye/internal/herdr"
 	"github.com/TorratDev/the-eye/internal/hub"
 	"github.com/TorratDev/the-eye/internal/live"
-	"github.com/TorratDev/the-eye/internal/relay"
 	"github.com/TorratDev/the-eye/internal/report"
 	"github.com/TorratDev/the-eye/internal/spawner"
 	"github.com/TorratDev/the-eye/internal/ui"
-	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
 
@@ -89,29 +87,8 @@ func mcpServe(args []string) error {
 	if *role == "" {
 		return errors.New("mcp needs --role or HUB_ROLE")
 	}
-	if *role != "orchestrator" || os.Getenv("HUB_CHANNEL") != "1" {
-		return server.ServeStdio(report.RemoteServer(*url, *role))
-	}
-	// the orchestrator was launched with the channel flag: declare the channel and relay the hub's
-	// messages once claude has connected, so the hub sees a relay only when a session can take it.
-	// The first request is initialize or server/discover, depending on the protocol version.
-	var s *server.MCPServer
-	var once gosync.Once
-	hooks := &server.Hooks{}
-	hooks.AddBeforeAny(func(context.Context, any, mcp.MCPMethod, any) {
-		once.Do(func() { go relay.Run(context.Background(), *url, time.Second, relay.ToSession(s)) })
-	})
-	s = report.RemoteServer(*url, *role, server.WithHooks(hooks),
-		server.WithExperimental(map[string]any{"claude/channel": map[string]any{}}))
-	// claude delivers channel events only on the legacy protocol: 2026-07-28 has no path for a
-	// server's unsolicited notifications, so server/discover offers the legacy versions alone
-	return server.ServeStdio(s, server.WithStdioContextFunc(func(ctx context.Context) context.Context {
-		return server.WithSupportedProtocolVersions(ctx, mcp.LegacyProtocolVersions())
-	}))
+	return server.ServeStdio(report.RemoteServer(*url, *role))
 }
-
-// channel streams the hub's messages for the orchestrator to the relay in its `hub mcp`.
-var channel = live.NewBroker()
 
 // serve runs the watcher page, the hook endpoint and the live stream on addr.
 func serve(args []string) error {
@@ -199,21 +176,12 @@ func startServe(o serveOpts) (wait func() error, err error) {
 		onEvent = o.onEvent(st, broker)
 	}
 	go func() {
-		mux := http.NewServeMux()
-		mux.Handle("GET /channel", channel.Handler(func() string { return "" }))
-		mux.Handle("/", ui.Handler(st, broker, commenter, onEvent, ui.Actions{Send: sendFromPage, Answer: spawner.AnswerPrompt, StartEpic: o.startEpic}))
-		errc <- http.Serve(ln, mux)
+		errc <- http.Serve(ln, ui.Handler(st, broker, commenter, onEvent, ui.Actions{Send: herdr.Send, Answer: spawner.AnswerPrompt, StartEpic: o.startEpic}))
 	}()
 	return func() error {
 		defer st.Close()
 		return <-errc
 	}, nil
-}
-
-// sendFromPage types a message from the session page into a pane once it is idle. A busy pane
-// fails fast, so the page can say so instead of hanging.
-func sendFromPage(pane, text string) error {
-	return spawner.SendWhenIdle(pane, text, 30*time.Second)
 }
 
 // pollCloud reads the epic's open sub-issues every interval and applies new cloud reports.
