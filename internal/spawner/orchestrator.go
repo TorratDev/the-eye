@@ -54,7 +54,7 @@ func startOrchestrator(check func() error, pane, prompt, resume string, run func
 // login check, resuming session resume when it is not "".
 func StartOrchestrator(pane, cwd, prompt, resume string) error {
 	return startOrchestrator(CheckLogin, pane, prompt, resume, func(pane, cmd string) error {
-		_, err := herdr.Run(pane, cwd, cmd, map[string]string{"role": "orchestrator"})
+		_, err := herdr.Run(pane, cwd, cmd, labels("orchestrator"))
 		return err
 	})
 }

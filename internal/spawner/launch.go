@@ -76,7 +76,7 @@ func Start(kind, pane, cwd, prompt, resume string) error {
 	if err != nil {
 		return err
 	}
-	_, err = herdr.Run(pane, cwd, cmd, map[string]string{"role": kind})
+	_, err = herdr.Run(pane, cwd, cmd, labels(kind))
 	return err
 }
 

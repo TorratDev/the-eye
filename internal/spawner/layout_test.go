@@ -21,3 +21,16 @@ func TestPanesAreValidHCNames(t *testing.T) {
 		seen[id] = true
 	}
 }
+
+// A session terminal joins the epic's window space only when ShowEpic found a window.
+func TestLabels(t *testing.T) {
+	defer func(s string) { space = s }(space)
+	space = ""
+	if l := labels("executor"); len(l) != 1 || l["role"] != "executor" {
+		t.Errorf("no window: %v", l)
+	}
+	space = "sp1"
+	if l := labels("reviewer"); l["herdr.space"] != "sp1" || l["role"] != "reviewer" {
+		t.Errorf("with a window: %v", l)
+	}
+}

@@ -70,7 +70,7 @@ Each phase is tracked as an epic. "Tested" means the Go tests pass; "live" means
 | 7. Cloud workers | #40 | done, tested | `serve --epic 95` polled GitHub, picked up a hand-posted BLOCKED report on #104, showed the alert and set the state (#104) |
 | 8. One-command epic run | #95 | done, tested | not run live yet (see open items) |
 | 9. Minimal session app | #96 | done, tested | not run in a browser yet; the page starts an epic, reads and messages sessions, answers prompts |
-| 10. Sessions on herdr-core (`hc`) | #152 | partly | throwaway epic #158 ran end to end on `hc` terminals (#154); forwards use `hc send` (#155); the app view (#156) is open |
+| 10. Sessions on herdr-core (`hc`) | #152 | done, tested | throwaway epics #158 and #162 ran end to end on `hc` terminals (#154) with `hc send` forwards (#155); with the herdr app open, an epic's sessions share an `epic <n>` space (#156) |
 
 Open items:
 - `hub plan` acts on the orchestrator's decisions from its `Stop` event (`last_assistant_message`, see `docs/hooks.md`). Results that need a human show on the page as a `hub` / `decisions` row. Not yet run live.
