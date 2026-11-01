@@ -1,5 +1,5 @@
-// Package relay forwards the hub's /events stream into the orchestrator session, so the
-// orchestrator reacts to events instead of polling.
+// Package relay forwards the hub's /channel stream into the orchestrator session as channel
+// events, so the hub's messages reach it mid-turn instead of waiting for its pane to go idle.
 package relay
 
 import (
@@ -14,14 +14,13 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
-// Method is the notification the relay sends to the orchestrator session. The channel protocol
-// name is not confirmed yet (see docs/channels.md).
+// Method is the notification that delivers a channel event into a claude session.
 const Method = "notifications/claude/channel"
 
-// ToSession returns a forward function that sends each event to every client of s.
+// ToSession returns a forward function that sends each event's data to every client of s.
 func ToSession(s *server.MCPServer) func(Event) {
 	return func(e Event) {
-		s.SendNotificationToAllClients(Method, map[string]any{"event": e.Name, "data": e.Data})
+		s.SendNotificationToAllClients(Method, map[string]any{"content": e.Data})
 	}
 }
 
@@ -54,7 +53,7 @@ func ReadEvents(r io.Reader, fn func(Event)) error {
 	return sc.Err()
 }
 
-// Run connects to hubURL/events, forwards each event and reconnects whenever the stream ends or
+// Run connects to hubURL/channel, forwards each event and reconnects whenever the stream ends or
 // fails, until ctx is done. The hub sends the current state on connect, so a reconnect resumes
 // with the latest view. The wait between attempts starts at retry and doubles up to 30 seconds.
 func Run(ctx context.Context, hubURL string, retry time.Duration, forward func(Event)) error {
@@ -76,7 +75,7 @@ func Run(ctx context.Context, hubURL string, retry time.Duration, forward func(E
 }
 
 func connect(ctx context.Context, hubURL string, forward func(Event)) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, hubURL+"/events", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, hubURL+"/channel", nil)
 	if err != nil {
 		return err
 	}

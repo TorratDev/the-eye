@@ -6,13 +6,18 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/TorratDev/the-eye/internal/herdr"
 )
 
-// ChannelFlag enables development channels. The relay (internal/relay) needs it; this build of
-// claude may not have it, in which case the orchestrator gets events through its pane instead.
-const ChannelFlag = "--dangerously-load-development-channels"
+// ChannelFlag enables development channels from the hub MCP server (mcpConfig names it "hub"). The
+// relay (internal/relay) needs it; claude before channelsSince does not have it, in which case the
+// orchestrator gets events through its pane instead.
+const ChannelFlag = "--dangerously-load-development-channels server:hub"
+
+// channelsSince is the first claude version with channels.
+var channelsSince = [3]int{2, 1, 80}
 
 // parseLogin reads `claude auth status --json`. Channels need a claude.ai login; an API key login
 // does not work for them.
@@ -42,10 +47,25 @@ func CheckLogin() error {
 	return parseLogin(out)
 }
 
-// ChannelFlagAvailable reports whether this claude build accepts ChannelFlag.
+// ChannelFlagAvailable reports whether this claude build accepts ChannelFlag. `claude --help` does
+// not list the flag, so the version decides.
 func ChannelFlagAvailable() bool {
-	out, err := exec.Command("claude", "--help").CombinedOutput()
-	return err == nil && strings.Contains(string(out), ChannelFlag)
+	out, err := exec.Command("claude", "--version").Output()
+	return err == nil && hasChannels(string(out))
+}
+
+// hasChannels reads `claude --version` output such as "2.1.316 (Claude Code)".
+func hasChannels(version string) bool {
+	var v [3]int
+	if n, _ := fmt.Sscanf(version, "%d.%d.%d", &v[0], &v[1], &v[2]); n != 3 {
+		return false
+	}
+	for i := range v {
+		if v[i] != channelsSince[i] {
+			return v[i] > channelsSince[i]
+		}
+	}
+	return true
 }
 
 // startOrchestrator checks the login, then types the orchestrator's launch line into pane.
@@ -59,15 +79,46 @@ func startOrchestrator(check func() error, channels bool, pane, prompt, resume s
 		return err
 	}
 	if channels {
-		cmd += " " + ChannelFlag
+		// HUB_CHANNEL tells `hub mcp` to relay the hub's messages into this session
+		cmd = "HUB_CHANNEL=1 " + cmd + " " + ChannelFlag
 	}
 	return run(pane, cmd)
+}
+
+// channelDialog is text from the warning claude shows on every launch with ChannelFlag.
+const channelDialog = "local development"
+
+// acceptChannels waits for the development-channels warning in the pane and takes its default
+// ("I am using this for local development"). enter is retried until it succeeds, since herdr may
+// report the pane blocked a moment after the text shows.
+func acceptChannels(read func() (string, error), enter func() error, timeout, poll time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for {
+		screen, err := read()
+		if err != nil {
+			return err
+		}
+		if strings.Contains(screen, channelDialog) && enter() == nil {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("no development-channels prompt to accept after %s", timeout)
+		}
+		time.Sleep(poll)
+	}
 }
 
 // StartOrchestrator launches the orchestrator in pane after the login check, resuming session
 // resume when it is not "".
 func StartOrchestrator(pane, prompt, resume string) error {
-	return startOrchestrator(CheckLogin, ChannelFlagAvailable(), pane, prompt, resume, func(pane, cmd string) error {
-		return herdr.PaneRun(pane, cmd)
+	channels := ChannelFlagAvailable()
+	return startOrchestrator(CheckLogin, channels, pane, prompt, resume, func(pane, cmd string) error {
+		if err := herdr.PaneRun(pane, cmd); err != nil || !channels {
+			return err
+		}
+		return acceptChannels(
+			func() (string, error) { return herdr.AgentRead(pane, 40) },
+			func() error { return AnswerPrompt(pane, true) },
+			time.Minute, time.Second)
 	})
 }

@@ -38,6 +38,13 @@ func (b *Broker) Publish(name, data string) {
 	}
 }
 
+// Clients is the number of connected clients.
+func (b *Broker) Clients() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return len(b.subs)
+}
+
 func (b *Broker) subscribe() chan string {
 	ch := make(chan string, 64)
 	b.mu.Lock()
