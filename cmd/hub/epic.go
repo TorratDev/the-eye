@@ -130,7 +130,13 @@ func (h *epicHost) start(epic int, listen func() (func() error, error)) error {
 			h.cfg, h.prompt = cfg, rendered
 			return rendered["orchestrator"], nil
 		},
-		layout: func() (map[string]string, error) { return spawner.Panes(epic), nil },
+		layout: func() (map[string]string, error) {
+			// the window is only a view: a failure is shown, the run goes on
+			if err := spawner.ShowEpic(epic, h.cwd); err != nil {
+				fmt.Fprintln(os.Stderr, "hub: app window:", err)
+			}
+			return spawner.Panes(epic), nil
+		},
 		serve: func(panes map[string]string) (func() error, error) {
 			wait := func() error { return nil }
 			if listen != nil {
