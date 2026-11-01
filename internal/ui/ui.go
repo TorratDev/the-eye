@@ -112,23 +112,29 @@ func Progress(st *hub.Store) (map[string][]int, error) {
 	return st.TaskNumbersByState()
 }
 
-var dashboard = template.Must(template.New("dashboard").Parse(`<h2>Errors and prompts</h2>
-<table>
-<thead><tr><th>Time</th><th>Role</th><th>Pane</th><th>Kind</th><th>Detail</th><th>Answer</th></tr></thead>
-<tbody>{{range .Alerts}}<tr><td>{{.At.Format "15:04:05"}}</td><td>{{.Role}}</td><td>{{.Pane}}</td><td>{{.Kind}}</td><td>{{.Detail}}</td><td>
-{{- if eq .Answer "keys"}}<span hx-target="this" hx-swap="innerHTML" hx-on::response-error="this.textContent=event.detail.xhr.responseText">
-<button hx-post="/sessions/{{.Pane}}/answer" hx-vals='{"choice":"allow"}'>Allow</button>
-<button hx-post="/sessions/{{.Pane}}/answer" hx-vals='{"choice":"deny"}'>Deny</button></span>
-{{- else if eq .Answer "page"}}<a href="/sessions/{{.Pane}}">Answer</a>{{end -}}
-</td></tr>{{else}}<tr><td colspan="6">none</td></tr>{{end}}</tbody>
-</table>
+var dashboard = template.Must(template.New("dashboard").Parse(`<section class="card">
+<h2>Progress</h2>
+<ul class="chips">{{range .Progress}}<li data-state="{{.State}}">{{.State}}: {{range $i, $c := .Issues}}{{if $i}}, {{end}}#{{$c.Number}}{{if $c.PR}} (<a href="{{$c.PR}}">PR</a>){{end}}{{end}}</li>{{else}}<li class="empty">no sub-issues tracked</li>{{end}}</ul>
+</section>
+<section class="card">
 <h2>Sessions</h2>
 <table>
 <thead><tr><th>Role</th><th>Pane</th><th>State</th><th>Sub-issue</th><th>Last event</th></tr></thead>
-<tbody>{{range .Rows}}<tr><td>{{.Role}}</td><td><a href="/sessions/{{.Pane}}">{{.Pane}}</a></td><td>{{.State}}</td><td>{{if .Issue}}#{{.Issue}}{{else}}-{{end}}</td><td>{{.At.Format "15:04:05"}}</td></tr>{{else}}<tr><td colspan="5">no sessions yet</td></tr>{{end}}</tbody>
+<tbody>{{range .Rows}}<tr><td>{{.Role}}</td><td><a href="/sessions/{{.Pane}}">{{.Pane}}</a></td><td><span class="pill" data-state="{{.State}}">{{.State}}</span></td><td>{{if .Issue}}#{{.Issue}}{{else}}<span class="muted">-</span>{{end}}</td><td class="muted">{{.At.Format "15:04:05"}}</td></tr>{{else}}<tr><td colspan="5" class="empty">no sessions yet</td></tr>{{end}}</tbody>
 </table>
-<h2>Progress</h2>
-<ul>{{range .Progress}}<li>{{.State}}: {{range $i, $c := .Issues}}{{if $i}}, {{end}}#{{$c.Number}}{{if $c.PR}} (<a href="{{$c.PR}}">PR</a>){{end}}{{end}}</li>{{else}}<li>no sub-issues tracked</li>{{end}}</ul>`))
+</section>
+<section class="card">
+<h2>Errors and prompts</h2>
+<table>
+<thead><tr><th>Time</th><th>Role</th><th>Pane</th><th>Kind</th><th>Detail</th><th>Answer</th></tr></thead>
+<tbody>{{range .Alerts}}<tr><td class="muted">{{.At.Format "15:04:05"}}</td><td>{{.Role}}</td><td>{{.Pane}}</td><td><span class="pill" data-state="{{.Kind}}">{{.Kind}}</span></td><td class="detail">{{.Detail}}</td><td>
+{{- if eq .Answer "keys"}}<span class="actions" hx-target="this" hx-swap="innerHTML" hx-on::response-error="this.textContent=event.detail.xhr.responseText">
+<button hx-post="/sessions/{{.Pane}}/answer" hx-vals='{"choice":"allow"}'>Allow</button>
+<button class="ghost" hx-post="/sessions/{{.Pane}}/answer" hx-vals='{"choice":"deny"}'>Deny</button></span>
+{{- else if eq .Answer "page"}}<a href="/sessions/{{.Pane}}">Answer</a>{{end -}}
+</td></tr>{{else}}<tr><td colspan="6" class="empty">none</td></tr>{{end}}</tbody>
+</table>
+</section>`))
 
 type progressLine struct {
 	State  string
@@ -189,14 +195,56 @@ var page = template.Must(template.New("page").Parse(`<!doctype html>
 <title>Hub sessions</title>
 <script src="https://unpkg.com/htmx.org@1.9.12"></script>
 <script src="https://unpkg.com/htmx.org@1.9.12/dist/ext/sse.js"></script>
+` + style + `
 </head><body>
-<h1>Sessions</h1>
+<header><h1>Hub</h1>
 <form hx-post="/epics" hx-target="#epic-status" hx-on::response-error="this.querySelector('#epic-status').textContent=event.detail.xhr.responseText">
 <label for="epic">Start epic #</label> <input id="epic" name="epic" type="number" min="1" required>
 <button>Start</button> <span id="epic-status" role="status"></span>
-</form>
-<div id="dashboard" hx-ext="sse" sse-connect="/events" sse-swap="state">{{.}}</div>
+</form></header>
+<main id="dashboard" hx-ext="sse" sse-connect="/events" sse-swap="state">{{.}}</main>
 </body></html>`))
+
+// style is the stylesheet both pages share. Colors are tokens, redefined for dark mode; data-state
+// colors a session state, task state or alert kind.
+const style = `<style>
+:root{--bg:#f5f6f8;--card:#fff;--fg:#1c2230;--muted:#6b7280;--line:#e4e7ec;--accent:#4f46e5;--accent-fg:#fff;
+--gray:#6b7280;--blue:#2563eb;--violet:#7c3aed;--green:#15803d;--amber:#b45309;--red:#dc2626;--user:#eef2ff}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1115;--card:#181b22;--fg:#e6e8ec;--muted:#9aa1ad;--line:#2a2f3a;
+--accent:#818cf8;--accent-fg:#0f1115;--gray:#9aa1ad;--blue:#60a5fa;--violet:#a78bfa;--green:#4ade80;--amber:#fbbf24;--red:#f87171;--user:#1e2235}}
+*{box-sizing:border-box}body{--c:var(--gray)}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;max-width:1080px;margin:0 auto;padding:20px 16px 4px}
+h1{font-size:20px;margin:0}h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0 0 10px}
+main{display:grid;gap:16px;max-width:1080px;margin:0 auto;padding:12px 16px 32px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;overflow-x:auto}
+table{width:100%;border-collapse:collapse}th{text-align:left;font-weight:500;color:var(--muted);font-size:12px}
+th,td{padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}tr:last-child td{border-bottom:0}
+tbody tr:hover{background:color-mix(in srgb,var(--accent) 5%,transparent)}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+.muted,.empty{color:var(--muted)}.detail{max-width:420px;word-break:break-word}
+.pill,.chips li{display:inline-block;border-radius:999px;padding:1px 9px;font-size:12px;
+color:var(--c);background:color-mix(in srgb,var(--c) 13%,transparent);border:1px solid color-mix(in srgb,var(--c) 30%,transparent)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;list-style:none;margin:0;padding:0}.chips li{padding:3px 11px;font-size:13px}
+[data-state=working],[data-state=claimed]{--c:var(--blue)}[data-state="in review"]{--c:var(--violet)}
+[data-state=approved]{--c:var(--green)}[data-state=blocked],[data-state=revise],[data-state=prompt]{--c:var(--amber)}
+[data-state=error],[data-state=escalated],[data-state="tool error"]{--c:var(--red)}
+form{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+input{font:inherit;color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:7px;padding:6px 10px}
+input:focus{outline:2px solid var(--accent);outline-offset:-1px}#epic{width:90px}
+button{font:inherit;border:1px solid var(--accent);background:var(--accent);color:var(--accent-fg);border-radius:7px;padding:5px 14px;cursor:pointer}
+button.ghost{background:transparent;color:var(--accent)}button:hover{filter:brightness(1.08)}
+.actions{display:inline-flex;gap:6px}[role=status]{color:var(--muted)}
+pre{white-space:pre-wrap;word-break:break-word;margin:4px 0 0;font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}
+.turns{display:grid;gap:8px}.turns>div{border-radius:10px;padding:10px 14px;background:var(--card);border:1px solid var(--line)}
+.turns>.user{background:var(--user);border-color:color-mix(in srgb,var(--accent) 25%,transparent)}
+.turns>div pre{font:inherit}
+.turns b{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+details{border:1px solid var(--line);border-radius:8px;padding:4px 12px;background:var(--card)}
+summary{cursor:pointer;color:var(--muted);font:12.5px ui-monospace,SFMono-Regular,Menlo,monospace}
+.error summary{color:var(--red)}
+.send{position:sticky;bottom:0;background:var(--bg);padding:12px 0}.send input{flex:1;min-width:200px}
+</style>`
 
 // finishFromFinalLine ends the task in an executor's or reviewer's pane from the final line of its
 // Stop event: DONE or BLOCKED for an executor (the fallback when it skipped the report tool), the
