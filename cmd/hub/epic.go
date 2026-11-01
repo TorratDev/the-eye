@@ -164,7 +164,7 @@ func (h *epicHost) attach(epic int, panes map[string]string, announced map[int]b
 	}
 	orchestrator := panes["orchestrator"]
 	fwd := newForwarder(panes,
-		func(text string) error { return spawner.SendWhenIdle(orchestrator, text, orchestratorWait) },
+		func(text string) error { return toOrchestrator(channel, orchestrator, text) },
 		func(text string, err error) {
 			alert(h.st, h.broker, "hub", decisionsPane, fmt.Sprintf("not forwarded to the orchestrator (%v): %s", err, text))
 		})

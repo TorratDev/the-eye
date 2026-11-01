@@ -25,8 +25,8 @@ func TestPinnedVersion(t *testing.T) {
 		}
 		t.Fatal(err)
 	}
-	if _, err := AgentRead("", 1); err == nil {
-		t.Fatal("AgentRead with an empty target succeeded, want error")
+	if _, err := PaneRead("", 1); err == nil {
+		t.Fatal("PaneRead with an empty pane succeeded, want error")
 	}
 }
 
