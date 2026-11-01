@@ -48,7 +48,7 @@ var sessionPage = template.Must(template.New("session").Parse(`<!doctype html>
 type Actions struct {
 	Send   func(pane, text string) error       // type a message once the session is idle
 	Answer func(pane string, allow bool) error // allow or deny the permission prompt the session waits on
-	// StartEpic lays out herdr and starts the orchestrator for an epic; the page's epic form.
+	// StartEpic starts the orchestrator for an epic in an hc terminal; the page's epic form.
 	StartEpic func(epic int) error
 }
 

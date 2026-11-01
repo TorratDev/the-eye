@@ -69,14 +69,15 @@ var hookSettings = func() string {
 	return string(b)
 }()
 
-// Start types the role's launch line into an existing pane at its shell prompt, resuming session
-// resume when it is not "".
-func Start(kind, pane, prompt, resume string) error {
+// Start runs the role's launch line in a new hc terminal named pane, in cwd, resuming session
+// resume when it is not "". hc refuses when a live terminal already has the name.
+func Start(kind, pane, cwd, prompt, resume string) error {
 	cmd, err := Command(kind, pane, prompt, resume)
 	if err != nil {
 		return err
 	}
-	return herdr.PaneRun(pane, cmd)
+	_, err = herdr.Run(pane, cwd, cmd, map[string]string{"role": kind})
+	return err
 }
 
 // shQuote wraps s in single quotes for a POSIX shell.

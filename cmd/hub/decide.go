@@ -63,8 +63,8 @@ func showResult(st *hub.Store, broker *live.Broker) func(decision.Result, error)
 	}
 }
 
-// liveDeps are the real effects of a decision for one epic. panes maps pane names to herdr pane IDs
-// (spawner.Ensure); prompts holds each role's rendered prompt.
+// liveDeps are the real effects of a decision for one epic. panes maps slot names to hc terminal
+// names (spawner.Panes); prompts holds each role's rendered prompt.
 func liveDeps(st *hub.Store, broker *live.Broker, repo, repoDir, worktreeRoot string, epic int, panes, prompts map[string]string) decision.Deps {
 	names := map[string]string{} // pane ID -> pane name
 	for name, id := range panes {
@@ -110,12 +110,12 @@ func liveDeps(st *hub.Store, broker *live.Broker, repo, repoDir, worktreeRoot st
 			}
 			if !running {
 				role, _, _ := strings.Cut(names[pane], "-")
-				// a session the hub ran here before (lost to a herdr restart) is resumed, not restarted
-				resume, err := st.LastSessionByName(names[pane])
+				// a session the hub ran here before (its terminal lost, e.g. to an hc restart) is resumed, not restarted
+				resume, err := st.LastSession(pane)
 				if err != nil {
 					return err
 				}
-				if err := spawner.Start(role, pane, prompts[role], resume); err != nil {
+				if err := spawner.Start(role, pane, repoDir, prompts[role], resume); err != nil {
 					return err
 				}
 			}

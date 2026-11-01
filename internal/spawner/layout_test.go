@@ -1,54 +1,23 @@
 package spawner
 
 import (
-	"reflect"
+	"regexp"
 	"testing"
-
-	"github.com/TorratDev/the-eye/internal/herdr"
 )
 
-func TestPlanPanes(t *testing.T) {
-	wanted := []string{"investigator-a", "investigator-b", "investigator-c"}
-	cases := []struct {
-		name  string
-		panes []herdr.Pane
-		want  []step
-	}{
-		{ // fresh tab: one unlabelled pane is named, the rest are split off it
-			name:  "fresh",
-			panes: []herdr.Pane{{ID: "p1"}},
-			want: []step{
-				{anchor: "p1", name: "investigator-a"},
-				{split: true, anchor: "p1", name: "investigator-b"},
-				{split: true, anchor: "p1", name: "investigator-c"},
-			},
-		},
-		{ // second run: everything is already named, nothing to do
-			name:  "reuse",
-			panes: []herdr.Pane{{ID: "p1", Label: "investigator-a"}, {ID: "p2", Label: "investigator-b"}, {ID: "p3", Label: "investigator-c"}},
-			want:  nil,
-		},
-		{ // a wanted name missing from a full tab is split, unrelated labels stay
-			name:  "missing",
-			panes: []herdr.Pane{{ID: "p1", Label: "investigator-a"}, {ID: "p2", Label: "other"}, {ID: "p3", Label: "investigator-b"}},
-			want:  []step{{split: true, anchor: "p1", name: "investigator-c"}},
-		},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			got, err := planPanes(wanted, c.panes)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !reflect.DeepEqual(got, c.want) {
-				t.Errorf("planPanes = %+v, want %+v", got, c.want)
-			}
-		})
-	}
-}
+// hc accepts 1-32 of a-z 0-9 - _ as a terminal name.
+var hcName = regexp.MustCompile(`^[a-z0-9_-]{1,32}$`)
 
-func TestPlanPanesEmptyTab(t *testing.T) {
-	if _, err := planPanes([]string{"x"}, nil); err == nil {
-		t.Error("planPanes on an empty tab succeeded, want error")
+func TestPanesAreValidHCNames(t *testing.T) {
+	ids := Panes(123456)
+	if len(ids) != 9 || ids["executor-1"] != "e123456-executor-1" {
+		t.Fatalf("Panes = %v", ids)
+	}
+	seen := map[string]bool{}
+	for slot, id := range ids {
+		if !hcName.MatchString(id) || seen[id] {
+			t.Errorf("%s -> %q: not a valid, unique hc name", slot, id)
+		}
+		seen[id] = true
 	}
 }

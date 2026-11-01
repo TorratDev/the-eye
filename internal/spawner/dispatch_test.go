@@ -20,10 +20,10 @@ func TestSendWhenIdle(t *testing.T) {
 	// busy, then idle: the text is sent once, after the pane is idle
 	statuses := []string{"working", "idle"}
 	sent := 0
-	get := func() (herdr.Pane, error) {
+	get := func() (herdr.Terminal, error) {
 		s := statuses[0]
 		statuses = statuses[1:]
-		return herdr.Pane{ID: "p1", AgentStatus: s}, nil
+		return herdr.Terminal{Name: "p1", Status: herdr.Status{State: s}}, nil
 	}
 	if err := sendWhenIdle(get, func() error { sent++; return nil }, time.Second, 0); err != nil {
 		t.Fatal(err)
@@ -34,15 +34,17 @@ func TestSendWhenIdle(t *testing.T) {
 
 	// always busy: refused, nothing sent
 	sent = 0
-	busy := func() (herdr.Pane, error) { return herdr.Pane{ID: "p1", AgentStatus: "working"}, nil }
+	busy := func() (herdr.Terminal, error) {
+		return herdr.Terminal{Name: "p1", Status: herdr.Status{State: "working"}}, nil
+	}
 	if err := sendWhenIdle(busy, func() error { sent++; return nil }, 0, 0); err == nil || sent != 0 {
 		t.Errorf("busy pane: err=%v sent=%d, want refusal and no send", err, sent)
 	}
 
-	// herdr error is returned
-	fail := func() (herdr.Pane, error) { return herdr.Pane{}, errors.New("boom") }
+	// an hc error is returned
+	fail := func() (herdr.Terminal, error) { return herdr.Terminal{}, errors.New("boom") }
 	if err := sendWhenIdle(fail, func() error { return nil }, 0, 0); err == nil {
-		t.Error("herdr error swallowed")
+		t.Error("hc error swallowed")
 	}
 }
 
@@ -52,9 +54,11 @@ func TestAnswerPrompt(t *testing.T) {
 		status string
 		allow  bool
 		want   string
-	}{{"blocked", true, "enter"}, {"blocked", false, "esc"}, {"idle", true, ""}, {"working", false, ""}, {"unknown", true, ""}} {
+	}{{"blocked", true, "enter"}, {"blocked", false, "esc"}, {"idle", true, ""}, {"working", false, ""}, {"", true, ""}} {
 		var sent string
-		err := answerPrompt(func() (herdr.Pane, error) { return herdr.Pane{ID: "p6", AgentStatus: c.status}, nil },
+		err := answerPrompt(func() (herdr.Terminal, error) {
+			return herdr.Terminal{Name: "p6", Status: herdr.Status{State: c.status}}, nil
+		},
 			func(key string) error { sent = key; return nil }, c.allow)
 		if sent != c.want || (c.want == "") != (err != nil) {
 			t.Errorf("%s allow=%v: sent %q, err %v", c.status, c.allow, sent, err)
@@ -62,11 +66,13 @@ func TestAnswerPrompt(t *testing.T) {
 	}
 }
 
-// A finished turn herdr still shows as done is ready for input, as idle is; blocked and unknown are not.
+// A finished turn (done) is ready for input, as idle is; blocked and not yet reported are not.
 func TestSendWhenDone(t *testing.T) {
-	for status, want := range map[string]bool{"done": true, "idle": true, "blocked": false, "unknown": false} {
+	for status, want := range map[string]bool{"done": true, "idle": true, "blocked": false, "": false} {
 		sent := false
-		get := func() (herdr.Pane, error) { return herdr.Pane{ID: "p1", AgentStatus: status}, nil }
+		get := func() (herdr.Terminal, error) {
+			return herdr.Terminal{Name: "p1", Status: herdr.Status{State: status}}, nil
+		}
 		err := sendWhenIdle(get, func() error { sent = true; return nil }, 5*time.Millisecond, time.Millisecond)
 		if sent != want || (err == nil) != want {
 			t.Errorf("%s: sent %v, err %v", status, sent, err)
