@@ -36,6 +36,7 @@ go run ./cmd/hub mcp --role <role>    # the report tool over stdio, for one sess
 - Go 1.26 (see `go.mod`)
 - `gh`, logged in to the target repo
 - herdr 0.9.5 (`herdr.PinnedVersion`)
+- herdr-core `hc` 0.1.16 (`herdr.HCPinnedVersion`), from the herdr desktop app; the hub moves onto it in Phase 10 (#152)
 - Claude Code with a claude.ai login, and the Ponytail plugin enabled
 - RTK (`rtk gain` must print its savings report)
 - `hub` on PATH, since `--mcp-config` starts the report tool with `hub mcp`: `go install ./cmd/hub` from this repo
@@ -45,7 +46,7 @@ go run ./cmd/hub mcp --role <role>    # the report tool over stdio, for one sess
 - `cmd/hub`: the entry point (`sync`, `serve`, `mcp`).
 - `internal/hub`: GitHub sync, the dependency graph, atomic claims, and the SQLite state store.
 - `internal/spawner`: herdr workspace, tab and pane layout; the launch line per role; worktrees; batch cap; idle-gated sends; the login and Ponytail/RTK checks.
-- `internal/herdr`: the only code that calls herdr, pinned to 0.9.5.
+- `internal/herdr`: the only code that calls herdr (0.9.5) and herdr-core (`hc` 0.1.16, `hc.go`).
 - `internal/ingest`: `POST /hooks`, which stores hook events with their role and pane.
 - `internal/session`: the final-line parser and the session state model.
 - `internal/transcript`: reads a session's transcript (`transcript_path`) into turns.
